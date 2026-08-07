@@ -576,9 +576,9 @@
   "notion": {
     "enabled": false,
     "sync": {
-      "auto_push_on_task_change": true,
-      "auto_push_on_commit": true,
-      "auto_pull_on_session_start": true,
+      "auto_push_on_task_change": false,
+      "auto_push_on_commit": false,
+      "auto_pull_on_session_start": false,
       "push_documents": false,
       "conflict_resolution": {
         "rules": {
