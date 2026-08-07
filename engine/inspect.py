@@ -13,7 +13,9 @@ import sys
 
 from .contracts import ContractError, load_inputs
 from .corridor import generate
+from .egress import compute as compute_egress
 from .grid import CellState, gridify
+from .place import place
 
 GLYPH = {
     CellState.OUTSIDE: " ",
@@ -24,15 +26,31 @@ GLYPH = {
     CellState.CORRIDOR: "=",
 }
 
-LEGEND = "  . 사용가능   # 코어   S 샤프트   o 기둥   = 복도   (공백) 외부"
+LEGEND = (
+    "  . 사용가능   # 코어   S 샤프트   o 기둥   = 복도   (공백) 외부\n"
+    "  y 청년형 18.0㎡   n 신혼형 28.8㎡   x 피난 한계 초과"
+)
 
 
-def render(grid) -> str:
+def render(grid, egress=None, placement=None) -> str:
     """위쪽이 +y 가 되도록 행을 뒤집어 출력한다."""
-    return "\n".join(
-        "".join(GLYPH[grid.cells[r][c]] for c in range(grid.cols))
-        for r in range(grid.rows - 1, -1, -1)
-    )
+    art = [[GLYPH[grid.cells[r][c]] for c in range(grid.cols)] for r in range(grid.rows)]
+
+    if egress is not None:
+        for r in range(grid.rows):
+            for c in range(grid.cols):
+                if grid.cells[r][c] == CellState.FREE and not egress.ok(r, c):
+                    art[r][c] = "x"
+
+    if placement is not None:
+        for u in placement.units:
+            r0, c0, rows, cols = u.cells
+            ch = u.type_id[0]
+            for r in range(r0, r0 + rows):
+                for c in range(c0, c0 + cols):
+                    art[r][c] = ch
+
+    return "\n".join("".join(art[r]) for r in range(grid.rows - 1, -1, -1))
 
 
 def main(argv=None) -> int:
@@ -40,6 +58,8 @@ def main(argv=None) -> int:
     p.add_argument("building_dir", help="building.json 과 floor_plan_*.json 이 있는 폴더")
     p.add_argument("--data", default="data", help="rules.json/units.json 위치")
     p.add_argument("--no-art", action="store_true", help="격자 그림 생략")
+    p.add_argument("--strategy", default="balanced",
+                   help="그림에 표시할 전략 (supply/balanced/minimal)")
     args = p.parse_args(argv)
 
     try:
@@ -88,9 +108,27 @@ def main(argv=None) -> int:
             print("  경고   양쪽 모두 유닛 깊이 미달 — 이 층은 세대 0 이 된다.")
         if not fp.stair_cores():
             print("  경고   stair 코어가 없다 — 피난 판정(④) 을 돌릴 수 없다.")
+
+        em = compute_egress(fp, grid, inp.rules, b)
+        mode = "모든 계단 충족" if em.all_cores else "가장 가까운 계단"
+        print(f"  피난   한계 {em.limit_m}m · {mode} · 계단 {em.stair_count}개소")
+        print(f"         도달 {em.reachable_cells}셀 중 한계 초과 {em.over_limit_cells}셀")
+
+        plans = {}
+        for sid in inp.units.strategies:
+            plans[sid] = place(grid, res, em, inp.rules, inp.units, sid)
+        print("  대안   " + " | ".join(
+            f"{inp.units.strategies[s].label} {p.count}세대"
+            f"(재사용 {p.shaft_reuse_ratio:.0%})" for s, p in plans.items()))
+        for s, p in plans.items():
+            mix = ", ".join(f"{inp.units.by_id(k).label} {v}"
+                            for k, v in sorted(p.count_by_type().items()))
+            print(f"         {inp.units.strategies[s].label:8s} {mix or '없음'}")
+
         if not args.no_art:
             print()
-            print(render(grid))
+            print(f"  [{inp.units.strategies[args.strategy].label}]")
+            print(render(grid, em, plans.get(args.strategy)))
             print(LEGEND)
 
     return 0

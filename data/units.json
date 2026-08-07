@@ -36,7 +36,9 @@
       "label": "저개입형",
       "fill_order": ["youth", "newlywed"],
       "priority": "shaft_proximity",
-      "_rule": "샤프트 최근접 셀부터 충전 — 설비 재사용률 최대화",
+      "constraint": "shaft_reuse_only",
+      "_rule": "샤프트 최근접 셀부터 충전하되, rules.shaft_reuse_threshold_cells 밖에는 아예 놓지 않는다 — 설비 재사용률 100%",
+      "_constraint_why": "순서만 바꾸고 놓을 수 있는 자리를 다 채우면 결국 공급우선형과 같은 집합이 되어 '저개입'이 성립하지 않는다. 세대수를 줄이는 대신 배관 신설을 0 으로 만드는 것이 이 대안의 정체다.",
       "_why": "중간표현에 내부 벽이 없어 '기존 벽 유지'는 산출 불가. 실제 개조에서 유지되는 것도 벽이 아니라 배관 위치다 (에스키스 가산 현관 옆 화장실 = 호텔 객실 표준 배치)."
     }
   }

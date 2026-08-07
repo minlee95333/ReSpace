@@ -85,6 +85,7 @@ class Rules:
     grid_mm: int
     corridor_width_mm: int
     corridor_side_usable_coverage: float
+    shaft_reuse_threshold_cells: int
     ceiling_min_mm: int
     daylight_area_ratio: float
     egress: Egress
@@ -132,6 +133,9 @@ class Rules:
             corridor_side_usable_coverage=float(
                 _require(d, "corridor_side_usable_coverage", w)
             ),
+            shaft_reuse_threshold_cells=int(
+                _require(d, "shaft_reuse_threshold_cells", w)
+            ),
             ceiling_min_mm=int(_require(d, "ceiling_min_mm", w)),
             daylight_area_ratio=float(_require(d, "daylight", w)["area_ratio"]),
             egress=Egress(
@@ -172,6 +176,7 @@ class Strategy:
     label: str
     fill_order: tuple[str, ...]
     priority: str | None
+    constraint: str | None  # 예: "shaft_reuse_only"
 
 
 @dataclass(frozen=True)
@@ -205,7 +210,13 @@ class Units:
                 UnitType(u["id"], u["label"], int(u["w_mm"]), int(u["d_mm"]), declared)
             )
         strategies = {
-            k: Strategy(k, v["label"], tuple(v["fill_order"]), v.get("priority"))
+            k: Strategy(
+                k,
+                v["label"],
+                tuple(v["fill_order"]),
+                v.get("priority"),
+                v.get("constraint"),
+            )
             for k, v in _require(d, "strategies", w).items()
         }
         units = Units(tuple(types), strategies)
