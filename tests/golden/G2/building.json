@@ -1,0 +1,15 @@
+{
+  "_about": "G2 — G1 과 같은 형상에서 깊이만 12m → 15m. 중복도가 성립하는 경계 바로 위다.",
+  "name": "G2 중복도 성립 평면",
+  "use": "업무시설",
+  "floors_total": 5,
+  "floors_residential": [1, 5],
+  "seismic": true,
+  "fire_resistant": true,
+  "floor_height_mm": 3000,
+  "approval_year": 2010,
+  "gfa_m2": 2250.0,
+  "parking_existing": 20,
+  "septic_capacity_m3": 30.0,
+  "source_note": "인공 테스트 평면"
+}

@@ -46,18 +46,28 @@
 
 ### 2.1 엔진
 
-- [ ] 계약 4파일 확정 (`rules.json`, `units.json`, `floor_plan.json` 예시, `building.json`)
-- [ ] ① load — 검증 + SHA-256 해시
-- [ ] ② gridify — 600mm 격자, 셀 상태 6종, 원점 오프셋
-- [ ] ③ corridor — 자동 생성 + 중복도/편복도 자체 판정
+- [x] 계약 4파일 확정 (`rules.json`, `units.json`, `floor_plan.json` 예시, `building.json`)
+- [x] ① load — 검증 + SHA-256 해시
+- [x] ② gridify — 600mm 격자, 셀 상태 6종, 원점 오프셋
+- [x] ③ corridor — 자동 생성 + 중복도/편복도 자체 판정
 - [ ] ④ reachability — 4방향 BFS, `all_cores` 스위치
 - [ ] ⑤ place — 3전략 (supply / balanced / minimal)
 - [ ] ⑥ daylight — 창면적비, 창 접면 0 탈락
 - [ ] ⑦ common — 잔여 영역 공용 전환
 - [ ] ⑧ caps — 3축 상한 + 병목 판정
 - [ ] ⑨ emit — `result.json` + SVG
-- [ ] 골든케이스 G1~G5 회귀 테스트
-- [ ] `run.bat` — 비개발자용 실행 래퍼
+- [x] 골든케이스 G1(세대 0) · G2(중복도 성립) — G3~G5 는 ④⑥ 완료 후
+- [x] `run.bat` — 비개발자용 실행 래퍼
+- [x] `python -m engine.inspect` — 도면 입력 검사 (격자 그림 + 경고)
+
+**현재 30개 테스트 통과.** `run.bat test` 로 실행.
+
+### 알려진 한계 (③ corridor)
+
+- 복도 축은 **직선만** 생성한다. 코어가 대각으로 떨어진 경우의 L자 경로는 미구현이며,
+  현재는 코어들이 더 벌어진 축 방향으로 직선을 놓는다. G5 작성 시 재검토한다.
+- 복도는 평면 **전폭**에 걸쳐 놓인다. 코어 사이 구간만 놓는 방식은 미구현.
+- `type == "none"` 이어도 복도는 그려진다. 세대가 0 이 되는 것이지 복도가 없는 것은 아니다.
 
 ### 2.2 대시보드
 
@@ -136,3 +146,4 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-08-07 | 설계 확정, PRD/TECH-SPEC/PROGRESS 작성. 미결정 ①~④ 해소 |
+| 2026-08-07 | 계약 4파일 + 엔진 ①②③ 구현, 골든 G1·G2, inspect CLI. 테스트 30개 통과 |

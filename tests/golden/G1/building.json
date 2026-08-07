@@ -1,0 +1,15 @@
+{
+  "_about": "G1 — 손으로 검산되는 인공 평면. 30×12m 에서 복도 1.8m 를 빼면 양옆 깊이가 유닛 깊이 6m 에 미치지 못한다. 세대 0 이 정답이다.",
+  "name": "G1 얕은 평면",
+  "use": "업무시설",
+  "floors_total": 5,
+  "floors_residential": [1, 5],
+  "seismic": true,
+  "fire_resistant": true,
+  "floor_height_mm": 3000,
+  "approval_year": 2010,
+  "gfa_m2": 1800.0,
+  "parking_existing": 20,
+  "septic_capacity_m3": 30.0,
+  "source_note": "인공 테스트 평면"
+}
