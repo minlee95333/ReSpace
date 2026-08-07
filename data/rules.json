@@ -1,0 +1,43 @@
+{
+  "_about": "법규 수치 전부. 코드에 하드코딩 금지 (CLAUDE.md 불변식). 밑줄로 시작하는 키는 로더가 무시한다.",
+  "version": "2026-08-07",
+
+  "grid_mm": 600,
+  "_grid_note": "ISO 건축 기본모듈 100mm 의 6배수(6M). 복도 1.2m=2셀, 1.8m=3셀, 세대 모듈이 정수 배로 떨어지는 최대 격자.",
+
+  "corridor_width_mm": 1800,
+  "ceiling_min_mm": 2100,
+
+  "daylight": {
+    "area_ratio": 0.1,
+    "_source": "거실 바닥면적의 1/10 이상 개구부",
+    "_note": "거리 기반 판정은 법정 요건이 아니므로 depth_from_window_m 로 기록만 한다 (거주성 보조지표)."
+  },
+
+  "egress": {
+    "base_m": 30,
+    "fire_resistant_m": 50,
+    "highrise_m": 40,
+    "highrise_from_floor": 16,
+    "all_cores": true,
+    "_all_cores_note": "true 이면 셀 판정이 max(각 stair 코어까지 거리) <= 한계, false 이면 min(...) <= 한계. true 로 두면 코어 2개 건물이 1개보다 불리해지므로 양쪽 실행 후 결정한다 (PROGRESS.md 미결정 ⑨).",
+    "_start_from": "cores[].type == 'stair' 만 출발점. ev 는 제외."
+  },
+
+  "parking": {
+    "bands": [
+      { "max_area_m2": 30, "inclusive": false, "coef": 0.5 },
+      { "max_area_m2": 60, "inclusive": true, "coef": 0.6 }
+    ],
+    "default_coef": 1.0,
+    "_note": "소형주택 특례. 전용 30㎡ 미만 0.5대, 60㎡ 이하 0.6대. 초과 시 세대당 1대 원칙.",
+    "_inclusive": "false = 미만(<), true = 이하(<=). 30 은 '미만'이므로 30.0㎡ 정확히는 0.6 구간이다."
+  },
+
+  "septic": {
+    "persons_per_unit": null,
+    "load_lpcd": null,
+    "_status": "미확정 — 하수도법 시행령 별표 확인 필요 (PROGRESS.md 미결정 ⑤, 기한 8/9)",
+    "_note": "null 이면 정화조 축을 계산할 수 없다. 엔진은 조용히 넘기지 말고 명시적으로 실패해야 한다."
+  }
+}
