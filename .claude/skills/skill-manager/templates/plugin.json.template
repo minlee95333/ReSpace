@@ -1,0 +1,13 @@
+{
+  "name": "{{SKILL_NAME}}",
+  "displayName": "{{DISPLAY_NAME}}",
+  "description": "{{DESCRIPTION}}",
+  "version": "{{VERSION}}",
+  "author": {
+    "name": "{{AUTHOR_NAME}}",
+    "url": "{{AUTHOR_URL}}"
+  },
+  "homepage": "{{HOMEPAGE}}",
+  "keywords": [{{KEYWORDS}}],
+  "category": "{{CATEGORY}}"
+}

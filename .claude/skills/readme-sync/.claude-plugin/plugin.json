@@ -1,0 +1,9 @@
+{
+  "name": "readme-sync",
+  "displayName": "README Sync",
+  "description": "Automatically synchronize README.md with actual project components",
+  "version": "1.0.0",
+  "author": "tygwan",
+  "category": "Documentation",
+  "keywords": ["readme", "sync", "documentation", "auto-update", "agents", "skills"]
+}

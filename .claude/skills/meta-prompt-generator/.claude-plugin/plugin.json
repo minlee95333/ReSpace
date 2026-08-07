@@ -1,0 +1,16 @@
+{
+  "name": "meta-prompt-generator",
+  "version": "1.0.0",
+  "description": "Generate structured custom slash commands with parallel processing workflows",
+  "author": {
+    "name": "Tygwan",
+    "url": "https://github.com/tygwan"
+  },
+  "homepage": "https://github.com/tygwan/skills/tree/master/meta-prompt-generator",
+  "keywords": [
+    "meta-prompt",
+    "workflow",
+    "automation",
+    "parallel-processing"
+  ]
+}

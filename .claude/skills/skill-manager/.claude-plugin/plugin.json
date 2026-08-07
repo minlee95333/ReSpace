@@ -1,0 +1,11 @@
+{
+  "name": "skill-manager",
+  "description": "Efficient management and deployment of Claude Code skills and marketplace. Automates marketplace initialization, skill updates, Git workflows, version management, and release notes with proper Git conventions.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Tygwan",
+    "url": "https://github.com/tygwan"
+  },
+  "homepage": "https://github.com/tygwan/skills/tree/master/skill-manager",
+  "keywords": ["marketplace", "git", "deployment", "versioning", "automation", "workflow"]
+}

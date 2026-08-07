@@ -1,0 +1,9 @@
+{
+  "name": "quality-gate",
+  "displayName": "Quality Gate",
+  "description": "Automated quality validation at critical development checkpoints",
+  "version": "1.0.0",
+  "author": "tygwan",
+  "category": "Quality Assurance",
+  "keywords": ["quality", "gate", "ci", "cd", "testing", "security", "release"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "sprint",
+  "displayName": "Sprint Manager",
+  "description": "Complete sprint lifecycle management with velocity tracking and retrospectives",
+  "version": "1.0.0",
+  "author": "tygwan",
+  "category": "Project Management",
+  "keywords": ["sprint", "agile", "scrum", "velocity", "burndown", "retrospective"]
+}

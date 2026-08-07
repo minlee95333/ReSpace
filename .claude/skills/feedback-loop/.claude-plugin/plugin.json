@@ -1,0 +1,9 @@
+{
+  "name": "feedback-loop",
+  "displayName": "Feedback Loop",
+  "description": "Automated feedback collection, learnings documentation, and ADR management",
+  "version": "1.0.0",
+  "author": "tygwan",
+  "category": "Documentation",
+  "keywords": ["feedback", "learning", "adr", "retrospective", "continuous-improvement"]
+}

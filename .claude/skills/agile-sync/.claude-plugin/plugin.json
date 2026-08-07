@@ -1,0 +1,9 @@
+{
+  "name": "agile-sync",
+  "displayName": "Agile Sync",
+  "description": "One-command synchronization of all agile development artifacts",
+  "version": "1.0.0",
+  "author": "tygwan",
+  "category": "Development Tools",
+  "keywords": ["agile", "sync", "changelog", "readme", "progress", "documentation"]
+}

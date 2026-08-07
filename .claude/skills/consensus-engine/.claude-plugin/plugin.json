@@ -1,0 +1,17 @@
+{
+  "name": "consensus-engine",
+  "version": "1.0.0",
+  "description": "Domain-agnostic Multi-LLM consensus engine with weighted voting and confidence scoring",
+  "author": {
+    "name": "Tygwan",
+    "url": "https://github.com/tygwan"
+  },
+  "homepage": "https://github.com/tygwan/skills/tree/master/consensus-engine",
+  "keywords": [
+    "consensus",
+    "multi-llm",
+    "voting",
+    "confidence",
+    "agent"
+  ]
+}

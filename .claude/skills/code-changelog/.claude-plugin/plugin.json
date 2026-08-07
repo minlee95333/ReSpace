@@ -1,0 +1,16 @@
+{
+  "name": "code-changelog",
+  "version": "1.0.0",
+  "description": "Track AI-generated code changes with automatic documentation and HTML viewer",
+  "author": {
+    "name": "Tygwan",
+    "url": "https://github.com/tygwan"
+  },
+  "homepage": "https://github.com/tygwan/skills/tree/master/code-changelog",
+  "keywords": [
+    "changelog",
+    "documentation",
+    "code-tracking",
+    "html-viewer"
+  ]
+}

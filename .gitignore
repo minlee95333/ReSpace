@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.output/
+.next/
+.nuxt/
+.svelte-kit/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Claude Code — 사용자별 산출물 (훅이 생성)
+.claude/logs/
+.claude/analytics/
+.claude/session.log
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary
+*.tmp
+*.backup
+*.bak-*

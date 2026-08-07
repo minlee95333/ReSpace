@@ -1,0 +1,12 @@
+{
+  "name": "{{MARKETPLACE_NAME}}",
+  "displayName": "{{DISPLAY_NAME}}",
+  "version": "1.0.0",
+  "owner": {
+    "name": "{{OWNER_NAME}}",
+    "url": "{{OWNER_URL}}"
+  },
+  "homepage": "{{HOMEPAGE}}",
+  "description": "{{DESCRIPTION}}",
+  "plugins": []
+}
