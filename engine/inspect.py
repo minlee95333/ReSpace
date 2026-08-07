@@ -11,13 +11,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .common import collect, summarize
+from .common import summarize
 from .contracts import ContractError, load_inputs
-from .corridor import generate
-from .daylight import evaluate
-from .egress import compute as compute_egress
-from .grid import CellState, gridify
-from .place import place
+from .grid import CellState
+from .pipeline import analyze_floor
 
 GLYPH = {
     CellState.OUTSIDE: " ",
@@ -96,9 +93,13 @@ def main(argv=None) -> int:
     if inp.rules.septic_persons_per_unit is None:
         print("미확정  rules.json: septic 파라미터 — 정화조 축 계산 불가")
 
+    # 층 확장(floors_residential)은 하지 않는다. 이 도구는 입력 도면을 보는 용도다.
     for fp in inp.floors:
-        grid = gridify(fp, inp.rules)
-        res = generate(fp, grid, inp.rules, inp.units)
+        runs = {
+            sid: analyze_floor(inp, fp.floor, sid) for sid in inp.units.strategies
+        }
+        ref = runs[args.strategy]
+        grid, res, em = ref.grid, ref.corridor, ref.egress
         x0, y0, x1, y1 = fp.bbox_mm
         print()
         print(f"── {fp.floor}층  {x1 - x0}×{y1 - y0}mm  "
@@ -121,45 +122,34 @@ def main(argv=None) -> int:
         if not fp.stair_cores():
             print("  경고   stair 코어가 없다 — 피난 판정(④) 을 돌릴 수 없다.")
 
-        em = compute_egress(fp, grid, inp.rules, b)
         mode = "모든 계단 충족" if em.all_cores else "가장 가까운 계단"
         print(f"  피난   한계 {em.limit_m}m · {mode} · 계단 {em.stair_count}개소")
         print(f"         도달 {em.reachable_cells}셀 중 한계 초과 {em.over_limit_cells}셀")
 
-        plans, lights, commons = {}, {}, {}
-        for sid in inp.units.strategies:
-            pr = place(grid, res, em, inp.rules, inp.units, sid)
-            dl = evaluate(fp, inp.rules, inp.units, pr)
-            plans[sid] = pr
-            lights[sid] = dl
-            commons[sid] = collect(grid, em, dl.units, dl.rejected)
-
         print("  대안   배치 → 채광통과 | 유형 구성 | 설비 재사용")
-        for s, pr in plans.items():
-            dl = lights[s]
+        for sid, fa in runs.items():
             mix = ", ".join(f"{inp.units.by_id(k).label} {v}"
-                            for k, v in sorted(pr.count_by_type().items()))
-            print(f"         {inp.units.strategies[s].label:8s} "
-                  f"{pr.count:3d} → {dl.kept:3d}세대  {mix or '없음':24s} "
-                  f"재사용 {pr.shaft_reuse_ratio:.0%}")
+                            for k, v in sorted(fa.placement.count_by_type().items()))
+            print(f"         {inp.units.strategies[sid].label:8s} "
+                  f"{fa.placement.count:3d} → {fa.daylight.kept:3d}세대  "
+                  f"{mix or '없음':24s} 재사용 {fa.placement.shaft_reuse_ratio:.0%}")
 
-        dl = lights[args.strategy]
-        if dl.rejected:
+        if ref.daylight.rejected:
             counts: dict[str, int] = {}
-            for r in dl.rejected:
+            for r in ref.daylight.rejected:
                 counts[r.reason] = counts.get(r.reason, 0) + 1
-            print(f"  채광   탈락 {len(dl.rejected)}세대 — "
+            print(f"  채광   탈락 {len(ref.daylight.rejected)}세대 — "
                   + ", ".join(f"{k} {v}" for k, v in counts.items()))
-            print(f"         예: {dl.rejected[0].detail}")
+            print(f"         예: {ref.daylight.rejected[0].detail}")
 
-        s = summarize(commons[args.strategy])
+        s = summarize(ref.commons)
         if s:
             print("  공용   " + ", ".join(f"{k} {v}㎡" for k, v in s.items()))
 
         if not args.no_art:
             print()
             print(f"  [{inp.units.strategies[args.strategy].label}]")
-            print(render(grid, em, plans[args.strategy], dl))
+            print(render(grid, em, ref.placement, ref.daylight))
             print(LEGEND)
 
     return 0

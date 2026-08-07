@@ -257,16 +257,38 @@ pass        = window_area >= required
 - 불변식: `FREE 면적 = 세대 면적 + 공용 면적`. 전 골든케이스에서 검증한다.
 - 공용 영역은 FREE 셀만 덮는다. 한계를 넘은 복도 셀은 여전히 복도다.
 
-### 5.5 ⑧ caps
+### 5.6 ⑧ caps
 
 ```
-plan    = Σ 층별 placed 수
-parking = floor(building.parking_existing / coef)      // coef: units 전용면적으로 결정
-septic  = floor(septic_capacity_m3 / (persons_per_unit × load_lpcd / 1000))
+plan    = Σ 층별 채광 통과 세대수
+parking = int(parking_existing / 배치 구성의 평균 주차계수)
+septic  = int(septic_capacity_m3 × units_per_m3)
 
-supply     = min(plan, parking, septic)
+supply     = min(확보된 축)
 bottleneck = argmin
 ```
+
+**입력이 없는 축은 숫자를 지어내지 않고 `value: null` + `blocked_reason` 으로 낸다.**
+파이프라인은 멈추지 않고, 확보된 축만으로 낸 **잠정 상한**임을 `complete: false` 와
+`note` 로 명시한다. 기본값을 넣으면 틀린 수치가 제안서까지 흘러간다.
+
+주차 계수는 배치된 유형 구성의 **평균**을 쓴다. 유형마다 전용면적이 달라 계수가
+갈리기 때문이다(현재 유형은 둘 다 0.5).
+
+**판정 등급** (설계 7.2절, 판정에는 반드시 이유가 붙는다)
+
+| 조건 | 등급 |
+|---|---|
+| `supply == 0` | 부적합 |
+| 미확보 축이 있음 | 조건부 검토 |
+| 병목이 주차·정화조 | 검토 가능 (인프라 보강 선행 필요) |
+| 병목이 평면 | 우선검토 (추가 투자 없이 공급 가능) |
+
+### 5.7 층 확장
+
+기준층 도면 1개만 주고 `building.floors_residential` 을 지정하면 그 범위만큼
+반복 분석한다. 층마다 피난 한계가 달라질 수 있으므로(16층 이상 40m) **실제 층
+번호로 각각 계산**한다. 층별 도면이 모두 있으면 그대로 쓴다.
 
 ---
 
@@ -309,37 +331,70 @@ bottleneck = argmin
     }
   ],
   "caps": {
-    "plan": 176, "parking": 60, "septic": 88,
-    "supply": 60, "bottleneck": "parking"
+    "axes": [
+      { "axis": "plan",    "label": "평면",  "value": 100,
+        "basis": "층별 배치 세대수 합계 100세대", "blocked_reason": null },
+      { "axis": "parking", "label": "주차",  "value": 40,
+        "basis": "기존 20대 ÷ 평균계수 0.50 = 40세대", "blocked_reason": null },
+      { "axis": "septic",  "label": "정화조", "value": null,
+        "basis": "정화조 원단위 미확정",
+        "blocked_reason": "rules.septic 파라미터가 미확정(null)이다 …" }
+    ],
+    "supply": 40,
+    "bottleneck": "parking",
+    "bottleneck_label": "주차",
+    "complete": false,
+    "note": "정화조 축 입력 미확보 — 확보된 축만으로 낸 잠정 상한이다."
   },
   "quantities": {
-    "demo_wall_m": 0.0,
-    "new_wall_m": 412.8,
-    "shaft_reuse_ratio": 0.62,
-    "septic_shortfall_m3": 0.0,
-    "parking_shortfall": 0
+    "units_total": 100,
+    "demo_wall_m": null,          // 기존 내부 벽이 입력 규격에 없어 산출 불가
+    "new_wall_m": 840.0,
+    "shaft_reuse_ratio": 0.0,
+    "common_area_m2": 180.0,
+    "parking": { "basis": "평면 상한 세대수 전량 실현 기준",
+                 "required": 50.0, "existing": 20, "shortfall": 30.0 },
+    "septic":  { "basis": "평면 상한 세대수 전량 실현 기준",
+                 "required_m3": null, "existing_m3": 30.0, "shortfall_m3": null }
   },
   "verdict": {
     "grade": "조건부 검토",
-    "reasons": ["주차 기준 상한이 평면 상한의 34%로 병목", "정화조 여유 있음"]
-  }
+    "reasons": ["병목은 주차 축 — 공급 가능 40세대 (5개 주거층 기준)", "…"]
+  },
+  "disclaimer": "본 결과는 매입 전 사전검토를 위한 개략분석이며, …"
 }
 ```
 
-`quantities` 에 단가·금액 필드는 없다. 총사업비는 대시보드에서
+`quantities` 에 단가·금액 필드는 **없다.** 총사업비는 대시보드에서
 사용자 입력 단가 × 물량으로 계산해 표시하며 "단가는 사용자 입력"임을 화면에 명시한다.
+부족분은 **평면 상한 전량을 실현할 때** 기준이며, 이 값이 곧 "병목을 풀려면 무엇을
+얼마나 보강해야 하는가"가 된다.
+
+`shaft_dist_cells` 는 샤프트가 없으면 `null` 이다. 내부 정렬용 대체값이 결과로
+새어나가지 않는다(회귀 테스트로 고정).
 
 ### 6.2 SVG
 
-층별 1개. 레이어 색상 구분:
+층별 1개 (`floor_NN.svg`). 축척 0.02 px/mm (36m → 720px). 외부 의존성 없음.
 
 | 요소 | 표현 |
 |---|---|
-| 외벽 / 코어 / 샤프트 / 기둥 | 검정 계열 |
-| 복도 | 회색 면 |
-| 배치 유닛 | 유형별 색, 라벨에 전용면적 |
-| 공용 전환 영역 | 해칭 + 사유 |
-| 탈락 구역 | 사유별 색 (채광 / 피난 / 깊이 부족) |
+| 외벽 | 검정 외곽선 |
+| 코어 / 샤프트 / 기둥 | 회색~검정 채움 |
+| 복도 | 옅은 회색 면 |
+| 배치 유닛 | 유형별 색 (청년 파랑 / 신혼 보라) |
+| 공용 전환 영역 | 사유별 색 반투명 (피난 빨강 / 창 미접 주황 / 채광 부족 연노랑 / 형상 회색) |
+
+`generated_at` 은 **호출자가 넘긴다.** 엔진이 시계를 읽으면 같은 입력에 같은 출력이라는
+전제가 깨져 회귀 비교를 할 수 없다.
+
+### 6.3 실행
+
+```
+python -m engine.inspect <building_dir>              도면 입력 검사 (격자 그림)
+python -m engine.report  <building_dir> [--out DIR] [--all-strategies]
+run.bat check|report|test ...                        비개발자용 래퍼
+```
 
 ---
 

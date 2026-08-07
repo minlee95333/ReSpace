@@ -29,7 +29,7 @@ class PlacedUnit:
     rect_mm: Rect
     side: Side
     egress_dist_m: float
-    shaft_dist_cells: int
+    shaft_dist_cells: int | None  # 샤프트가 없으면 None
     # ⑥ daylight 가 채운다. 배치 시점에는 None.
     window_len_mm: int | None = None
     daylight_ratio: float | None = None
@@ -52,6 +52,12 @@ class PlacementResult:
         for u in self.units:
             out[u.type_id] = out.get(u.type_id, 0) + 1
         return out
+
+
+def is_shaft_reusable(unit: "PlacedUnit", rules: Rules) -> bool:
+    """기존 배관 계통에 붙일 수 있는 세대인가. 샤프트가 없으면 False."""
+    d = unit.shaft_dist_cells
+    return d is not None and d <= rules.shaft_reuse_threshold_cells
 
 
 def shaft_distance_field(grid: Grid) -> list[list[int | None]]:
@@ -161,7 +167,13 @@ def _max_egress(egress: EgressMap, cells: tuple[int, int, int, int]) -> float:
     )
 
 
-def _min_shaft(field: list[list[int | None]], cells: tuple[int, int, int, int]) -> int:
+#: 샤프트가 없거나 도달 불가일 때의 정렬용 대체값. 결과 파일에는 None 으로 나간다.
+_FAR = 10**6
+
+
+def _min_shaft(
+    field: list[list[int | None]], cells: tuple[int, int, int, int]
+) -> int | None:
     r0, c0, rows, cols = cells
     vals = [
         field[r][c]
@@ -169,7 +181,11 @@ def _min_shaft(field: list[list[int | None]], cells: tuple[int, int, int, int]) 
         for c in range(c0, c0 + cols)
         if field[r][c] is not None
     ]
-    return min(vals) if vals else 10**6
+    return min(vals) if vals else None
+
+
+def _shaft_key(v: int | None) -> int:
+    return _FAR if v is None else v
 
 
 def place(
@@ -203,7 +219,9 @@ def place(
                     cells = _unit_cells(grid, corridor, side, lane, w, d)
                     if cells is None or not _fits(grid, egress, occupied, cells):
                         continue
-                    if max_shaft is not None and _min_shaft(field, cells) > max_shaft:
+                    if max_shaft is not None and _shaft_key(
+                        _min_shaft(field, cells)
+                    ) > max_shaft:
                         continue
                     yield side, lane, ti, t, cells
 
@@ -212,7 +230,10 @@ def place(
         best_key = None
         for side, lane, ti, t, cells in candidates():
             if by_shaft:
-                key = (_min_shaft(field, cells), _SIDE_RANK[side], lane, ti)
+                key = (
+                    _shaft_key(_min_shaft(field, cells)),
+                    _SIDE_RANK[side], lane, ti,
+                )
             else:
                 # 균형형은 적게 놓인 유형을 먼저 집어 교대 배치가 되게 한다.
                 key = (_SIDE_RANK[side], lane, counts[t.id], ti)
@@ -239,9 +260,7 @@ def place(
         counts[t.id] += 1
 
     leftover = grid.count(CellState.FREE) - len(occupied)
-    near = sum(
-        1 for u in placed if u.shaft_dist_cells <= rules.shaft_reuse_threshold_cells
-    )
+    near = sum(1 for u in placed if is_shaft_reusable(u, rules))
     ratio = (near / len(placed)) if placed else 0.0
 
     return PlacementResult(
@@ -250,3 +269,34 @@ def place(
         leftover_free_cells=leftover,
         shaft_reuse_ratio=round(ratio, 4),
     )
+
+
+#: 기존 구조체. 이 면에는 이미 벽이 있으므로 신설 물량에서 뺀다.
+_EXISTING = (CellState.OUTSIDE, CellState.CORE, CellState.SHAFT, CellState.COLUMN)
+
+
+def new_wall_length_mm(grid: Grid, units: tuple[PlacedUnit, ...]) -> int:
+    """신설해야 하는 세대 구획벽 연장(mm).
+
+    유닛 경계면 중 기존 구조체에 접한 면은 제외한다. 유닛끼리 맞닿은 면은 한 번만 센다.
+    단가는 곱하지 않는다 — 시스템은 물량까지만 낸다 (설계 [결정 필요] ④).
+    """
+    owner: dict[tuple[int, int], int] = {}
+    for i, u in enumerate(units):
+        r0, c0, rows, cols = u.cells
+        for r in range(r0, r0 + rows):
+            for c in range(c0, c0 + cols):
+                owner[(r, c)] = i
+
+    faces: set[frozenset[tuple[int, int]]] = set()
+    for (r, c), i in owner.items():
+        for dr, dc in _NEIGHBORS:
+            n = (r + dr, c + dc)
+            if owner.get(n) == i:
+                continue  # 같은 유닛 내부
+            if not grid.in_bounds(*n):
+                continue  # 격자 밖 = 외벽
+            if grid.cells[n[0]][n[1]] in _EXISTING:
+                continue  # 기존 벽을 그대로 쓴다
+            faces.add(frozenset(((r, c), n)))
+    return len(faces) * grid.grid_mm
