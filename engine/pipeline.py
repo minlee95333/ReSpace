@@ -146,6 +146,63 @@ def _quantities(inputs: Inputs, floors: tuple[FloorAnalysis, ...], caps: Caps) -
     }
 
 
+def recommend(analyses: dict[str, Analysis]) -> tuple[str, tuple[str, ...]]:
+    """3안 중 추천안과 근거.
+
+    ① 공급 가능 세대수가 많은 안 — 세대수가 이 사업의 목적이다.
+    ② 동수면 설비 재사용률이 높은 안 — 배관 신설이 적다.
+    ③ 그것도 같으면 신설 벽체가 적은 안 — 같은 결과라면 덜 뜯는 쪽이 싸고 빠르다.
+
+    인프라가 병목이면 여러 안이 같은 공급량에 걸리므로 ②③ 이 실제로 갈림길이 된다.
+    """
+    if not analyses:
+        raise ContractError("비교할 대안이 없다.")
+
+    def key(item):
+        _, a = item
+        return (
+            -a.caps.supply,
+            -a.quantities["shaft_reuse_ratio"],
+            a.quantities["new_wall_m"],
+        )
+
+    ordered = sorted(analyses.items(), key=key)
+    best_id, best = ordered[0]
+    label = lambda i, a: a.inputs.units.strategies[i].label
+
+    tied = [(i, a) for i, a in ordered if a.caps.supply == best.caps.supply]
+    reasons = [
+        f"{label(best_id, best)} — 공급 가능 {best.caps.supply}세대로 최다"
+        if len(tied) == 1
+        else f"{label(best_id, best)} — 공급 가능 {best.caps.supply}세대, "
+             f"동수 {len(tied)}안 중 선택"
+    ]
+
+    if len(tied) > 1:
+        rid, rival = tied[1]
+        bq, rq = best.quantities, rival.quantities
+        if bq["shaft_reuse_ratio"] != rq["shaft_reuse_ratio"]:
+            reasons.append(
+                f"{label(rid, rival)}보다 설비 재사용률이 높아 배관 신설이 적다 "
+                f"({bq['shaft_reuse_ratio']:.0%} vs {rq['shaft_reuse_ratio']:.0%})"
+            )
+        elif bq["new_wall_m"] != rq["new_wall_m"]:
+            reasons.append(
+                f"{label(rid, rival)}와 세대수·설비 재사용률이 같아 신설 벽체가 "
+                f"적은 안을 택했다 ({bq['new_wall_m']}m vs {rq['new_wall_m']}m)"
+            )
+        else:
+            reasons.append(
+                f"{label(rid, rival)}와 비교 지표가 모두 같아 목록 순서로 택했다"
+            )
+    elif len(ordered) > 1:
+        rid, rival = ordered[1]
+        reasons.append(f"차순위 {label(rid, rival)}은 {rival.caps.supply}세대")
+
+    reasons.append(f"판정 {best.grade}")
+    return best_id, tuple(reasons)
+
+
 def analyze(inputs: Inputs, strategy: str) -> Analysis:
     if strategy not in inputs.units.strategies:
         raise ContractError(

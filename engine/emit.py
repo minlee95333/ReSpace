@@ -134,6 +134,46 @@ def build_result(analysis: Analysis, generated_at: str | None = None) -> dict:
 # ---------------------------------------------------------------- SVG
 
 
+def _rect_cells(cells: tuple[int, int, int, int]) -> set[tuple[int, int]]:
+    r0, c0, rows, cols = cells
+    return {(r, c) for r in range(r0, r0 + rows) for c in range(c0, c0 + cols)}
+
+
+def _leftover_cells(f: FloorAnalysis) -> dict[str, set[tuple[int, int]]]:
+    """세대·탈락세대를 뺀 잔여 FREE 셀을 사유별로 나눈다. ⑦ 과 같은 규칙."""
+    used: set[tuple[int, int]] = set()
+    for u in f.units:
+        used |= _rect_cells(u.cells)
+    for rj in f.daylight.rejected:
+        used |= _rect_cells(rj.cells)
+
+    grid = f.grid
+    out: dict[str, set[tuple[int, int]]] = {"egress_over_limit": set(), "geometry": set()}
+    for r in range(grid.rows):
+        for c in range(grid.cols):
+            if grid.cells[r][c] != CellState.FREE or (r, c) in used:
+                continue
+            key = "geometry" if f.egress.ok(r, c) else "egress_over_limit"
+            out[key].add((r, c))
+    return {k: v for k, v in out.items() if v}
+
+
+def _row_runs(cells: set[tuple[int, int]]) -> list[tuple[int, int, int]]:
+    """{(r,c)} → [(row, col_start, col_end)] 로 가로 연속 구간을 묶는다."""
+    runs: list[tuple[int, int, int]] = []
+    for r in sorted({r for r, _ in cells}):
+        cols = sorted(c for rr, c in cells if rr == r)
+        start = prev = cols[0]
+        for c in cols[1:]:
+            if c == prev + 1:
+                prev = c
+                continue
+            runs.append((r, start, prev))
+            start = prev = c
+        runs.append((r, start, prev))
+    return runs
+
+
 def _rect(x, y, w, h, fill, stroke=None, sw=0.5, opacity=None) -> str:
     parts = [f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"',
              f'fill="{fill}"']
@@ -182,13 +222,25 @@ def build_svg(f: FloorAnalysis, title: str) -> str:
             s = grid.grid_mm * PX_PER_MM
             out.append(_rect(x, y, s, s, fill))
 
-    # 공용 전환 영역 (사유별)
-    for a in f.commons:
-        x_mm, y_mm, aw, ah = a.bbox_mm
-        x, y = px(x_mm, y_mm + ah)
+    # 공용 전환 영역. bbox 로 그리면 ㄱ자·띠 모양이 실제와 다르게 보이므로
+    # 셀 단위로 칠하되, 같은 행에서 이어지는 셀을 하나로 묶어 파일 크기를 억제한다.
+    for reason, cells in _leftover_cells(f).items():
+        for r, c0, c1 in _row_runs(cells):
+            x_mm, y_mm = grid.to_mm(r, c0)
+            x, y = px(x_mm, y_mm + grid.grid_mm)
+            out.append(
+                _rect(x, y, (c1 - c0 + 1) * grid.grid_mm * PX_PER_MM,
+                      grid.grid_mm * PX_PER_MM,
+                      REASON_FILL[reason], None, 0, 0.6)
+            )
+
+    # 채광 탈락 세대는 사각형 그대로. 어디가 왜 빠졌는지가 보여야 한다.
+    for rj in f.daylight.rejected:
+        x_mm, y_mm, rw, rh = rj.rect_mm
+        x, y = px(x_mm, y_mm + rh)
         out.append(
-            _rect(x, y, aw * PX_PER_MM, ah * PX_PER_MM,
-                  REASON_FILL[a.reason], "#bbbbbb", 0.4, 0.55)
+            _rect(x, y, rw * PX_PER_MM, rh * PX_PER_MM,
+                  REASON_FILL[rj.reason], "#b08a30", 0.5, 0.75)
         )
 
     # 배치 유닛

@@ -388,13 +388,47 @@ bottleneck = argmin
 `generated_at` 은 **호출자가 넘긴다.** 엔진이 시계를 읽으면 같은 입력에 같은 출력이라는
 전제가 깨져 회귀 비교를 할 수 없다.
 
-### 6.3 실행
+### 6.3 대시보드 (`dashboard.html`)
+
+**자립형 단일 파일.** 데이터를 HTML 안에 심는다 — `fetch()` 는 `file://` 에서 CORS 로
+막히므로 별도 파일을 읽는 방식은 비개발자가 더블클릭으로 열 수 없다. 심어두면
+파일 하나가 그대로 공개 링크이자 PT 시연 화면이 된다. 외부 리소스 참조 0.
+
+- UI 는 `dashboard/template.html` (편집 가능한 실제 HTML)
+- `engine/dashboard.py` 가 `<!--RESPACE_DATA-->` 자리에 `window.__RESPACE__` 를 주입
+- 데이터의 `</` 를 `<\/` 로 이스케이프해 스크립트 블록 조기 종료를 막는다
+- 계산은 엔진에, 표현은 템플릿에. 추천안 선정도 엔진(`pipeline.recommend`)에 둔다
+
+**4화면** — ① 후보 건물 ② 건물 상세분석 ③ 대안 비교 ④ 검토보고서.
+모든 화면 상단에 **몇 세대 / 무엇이 병목 / 무슨 위험**을 고정 표시한다(설계 7.1절 UI 원칙).
+
+**해시 라우팅** `#t2/b1/f3` = 대안 비교 · 두 번째 건물 · 4번째 층. 링크 공유와
+헤드리스 캡처에 쓴다.
+
+**추천안 선정** (`pipeline.recommend`)
+1. 공급 가능 세대수가 많은 안
+2. 동수면 설비 재사용률이 높은 안 (배관 신설 적음)
+3. 그것도 같으면 신설 벽체가 적은 안 (같은 결과면 덜 뜯는 쪽)
+
+인프라가 병목이면 여러 안이 같은 공급량에 걸리므로 2·3 이 실제 갈림길이 된다.
+
+### 6.4 실행
 
 ```
-python -m engine.inspect <building_dir>              도면 입력 검사 (격자 그림)
-python -m engine.report  <building_dir> [--out DIR] [--all-strategies]
-run.bat check|report|test ...                        비개발자용 래퍼
+python -m engine.inspect <building_dir>                 도면 입력 검사 (격자 그림)
+python -m engine.report  <dir> [<dir> ...] [--out DIR]  result.json + SVG + dashboard.html
+run.bat check|report|test ...                           비개발자용 래퍼
 ```
+
+### 6.5 대시보드 검증
+
+브라우저 확장이 없어도 검증 가능한 범위를 테스트로 고정했다.
+
+| 방법 | 확인 내용 |
+|---|---|
+| Python | 주입 성공, JSON 재파싱, 외부 리소스 0, 데이터가 앱 스크립트보다 앞 |
+| Node + DOM 스텁 (`tests/smoke_dashboard.mjs`) | 4탭 × 전 건물 × 전 전략 × 전 층 렌더, `undefined`/`NaN` 미출력, 해시 라우팅 |
+| 헤드리스 Chrome | 실제 렌더 육안 확인 (수동) |
 
 ---
 
