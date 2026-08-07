@@ -1,0 +1,348 @@
+# TECH-SPEC — Re:Space
+
+작성일: 2026-08-07
+설계 근거: `docs/plans/2026-08-07-lh-respace-design.md`
+
+---
+
+## 1. 구성
+
+```
+[ 기준 데이터 ]  rules.json / units.json
+                      │
+[ 엔진 ]         Python 3.11+, 화면을 모름
+                 floor_plan.json + building.json → result.json + *.svg
+                      │
+[ 표현 ]         HTML 대시보드, 계산을 모름 — result.json 을 읽어 렌더
+```
+
+의존성은 최소로 유지한다. 실행은 `run.bat` 하나로 감싸 비개발자가 명령어 없이 돌린다.
+
+**계층 규칙**: 엔진은 대시보드를 import 하지 않는다. 렌더러(SVG)는 엔진 안에 있으나
+판정 로직에 의존만 하고 역방향은 없다.
+
+---
+
+## 2. 좌표계와 단위
+
+| 항목 | 규칙 |
+|---|---|
+| 입력 좌표 단위 | **mm** (정수) |
+| 원점 | 각 층 도면의 좌하단. 층 간 원점은 일치해야 함 |
+| 격자 | 600mm 정사각 |
+| 격자 인덱스 | `(col, row)`, 좌하단 `(0,0)`, col 은 +x, row 는 +y |
+| 원점 오프셋 | `boundary` 바운딩박스 최소점을 격자 원점으로 삼고 `grid_origin_mm` 에 기록 |
+
+결과를 원래 좌표계로 되돌리려면 `grid_origin_mm` 과 `grid_mm` 이 함께 필요하다.
+둘 다 `result.json` 에 기록한다.
+
+---
+
+## 3. 입력 규격
+
+### 3.1 `floor_plan.json` — 층마다 1개
+
+```jsonc
+{
+  "floor": 5,
+  "unit": "mm",
+  "boundary": [[0,0],[36000,0],[36000,18000],[0,18000]],   // 외벽 폴리곤, CCW
+  "cores": [
+    {"type": "stair", "rect": [16800, 7200, 3600, 3600]},  // [x, y, w, h]
+    {"type": "ev",    "rect": [20400, 7200, 2400, 3600]}
+  ],
+  "shafts":  [{"rect": [15600, 7200, 1200, 3600]}],
+  "columns": [{"center": [7200, 3600], "size": [600, 600]}],
+  "windows": [
+    {"start": [0,0], "end": [36000,0], "sill": 900, "height": 1500}
+  ]
+}
+```
+
+| 필드 | 의미 | 비고 |
+|---|---|---|
+| `boundary` | 외벽 폴리곤 꼭짓점 | 닫힌 폴리곤, 첫 점 반복 금지 |
+| `cores[].type` | `stair` \| `ev` | **피난 BFS 출발점은 `stair` 만** |
+| `shafts` | PS 등 설비 샤프트 | 배치 불가 영역이자 재사용률 기준점 |
+| `columns` | 기둥 중심과 단면 | 배치 불가 |
+| `windows` | 창 구간 | **독립 좌표.** 외벽 변 인덱스를 쓰지 않음 |
+
+`windows` 를 변 인덱스가 아닌 독립 좌표로 두는 이유: IFC 에서 창을 추출하면 벽과의
+관계가 아니라 절대 좌표로 나오고, 사람이 입력할 때도 변 인덱스를 세는 것은 실수가 잦다.
+
+**DWG 처리 방침**: DWG 는 비공개 바이너리 포맷이며 국내 도면의 레이어 명명 규칙이
+표준화돼 있지 않아 자동 추출은 오류 위험이 크다. **사람이 CAD 에서 외벽·코어·창호를
+지정해 중간표현으로 내보내는 단계를 명시적으로 둔다.** 자동화 실패가 아니라 설계 판단이다.
+
+### 3.2 `building.json`
+
+```jsonc
+{
+  "name": "에스키스 가산 (공개정보 재구성)",
+  "use": "숙박시설",
+  "approval_year": 2003,
+  "gfa_m2": 24000,
+  "floors_total": 19,
+  "floors_residential": [4, 19],      // 주거 전환 대상 층 범위 (inclusive)
+  "seismic": true,
+  "fire_resistant": true,             // → 피난 한계 50m
+  "floor_height_mm": 3000,
+  "parking_existing": 30,
+  "septic_capacity_m3": 45.0,
+  "source_note": "원본 도면 아님. 공개 정보 기반 재구성"
+}
+```
+
+### 3.3 `rules.json` — 법규 수치 전부
+
+```jsonc
+{
+  "version": "2026-08-07",
+  "grid_mm": 600,
+  "corridor_width_mm": 1800,
+  "ceiling_min_mm": 2100,
+  "daylight": { "area_ratio": 0.1 },
+  "egress": {
+    "base_m": 30,
+    "fire_resistant_m": 50,
+    "highrise_m": 40,
+    "highrise_from_floor": 16,
+    "all_cores": true            // 스위치. 4.2절 참조
+  },
+  "parking": [
+    { "max_area_m2": 30, "exclusive": true,  "coef": 0.5 },
+    { "max_area_m2": 60, "exclusive": false, "coef": 0.6 }
+  ],
+  "septic": {
+    "persons_per_unit": null,    // 미확정 — 하수도법 시행령 별표 확인 필요
+    "load_lpcd": null            // 미확정
+  }
+}
+```
+
+`egress.all_cores` 는 `true` / `false` 양쪽을 실행해 비교한다.
+`true` 이면 셀 판정이 `max(각 stair 코어까지 거리) ≤ 한계`, `false` 이면 `min(...) ≤ 한계`.
+
+**하드코딩 금지**: 위 수치는 코드에 나타나면 안 된다.
+
+### 3.4 `units.json`
+
+```jsonc
+[
+  { "id": "youth",    "label": "청년형", "w_mm": 3000, "d_mm": 6000, "area_m2": 18.0 },
+  { "id": "newlywed", "label": "신혼형", "w_mm": 4800, "d_mm": 6000, "area_m2": 28.8 }
+]
+```
+
+600mm 격자에서 각각 5×10셀, 8×10셀. 둘 다 전용 30㎡ 미만이라 주차 계수 0.5.
+
+---
+
+## 4. 셀 상태
+
+| 값 | 의미 | 배치 |
+|---|---|---|
+| `FREE` | 사용가능 | 가능 |
+| `CORE` | 계단·EV | 불가 |
+| `SHAFT` | 설비 샤프트 | 불가 (인접 셀은 재사용률 가점) |
+| `COLUMN` | 기둥 | 불가 |
+| `CORRIDOR` | 복도 | 불가 (통행) |
+| `OUTSIDE` | 외벽 밖 | 불가 |
+
+부분적으로 걸치는 셀은 **보수적으로** 처리한다 — 기둥·코어·샤프트가 셀에 조금이라도
+걸치면 그 셀 전체를 해당 상태로 본다.
+
+---
+
+## 5. 모듈 규격
+
+| # | 모듈 | 입력 | 출력 |
+|---|---|---|---|
+| ① | `load` | 파일 경로 | 검증된 dict + SHA-256 해시 |
+| ② | `gridify` | floor_plan, rules | `Grid(cells, origin_mm, grid_mm)` |
+| ③ | `corridor` | Grid | Grid(CORRIDOR 마킹), `corridor_type` |
+| ④ | `reachability` | Grid, rules, building | `dist[cell] → m`, `blocked[]` |
+| ⑤ | `place` | Grid, units, 전략 | `placed[]`, `leftover[]` |
+| ⑥ | `daylight` | placed, windows, rules | `placed[].daylight_ratio`, 탈락 목록 |
+| ⑦ | `common` | leftover | `common_areas[]` |
+| ⑧ | `caps` | 전 층 placed, building, rules | `caps`, `bottleneck` |
+| ⑨ | `emit` | 전부 | `result.json`, `*.svg` |
+
+③~⑦ 은 층마다, ⑧ 은 전 층 합계로 1회 실행.
+
+### 5.1 ③ corridor
+
+```
+코어(stair+ev) 2개 이상 → 코어 중심 잇는 격자 경로(직선 또는 L자), 폭 3셀
+코어 1개                → boundary 바운딩박스 장변 방향으로 코어에서 양쪽 연장
+```
+
+축 확정 후 양옆 깊이 측정:
+
+| 조건 | 결과 |
+|---|---|
+| 양쪽 다 ≥ 10셀(6m) | `corridor_type = "double"` (중복도) |
+| 한쪽만 ≥ 10셀 | `corridor_type = "single"`, 복도를 외벽 쪽으로 오프셋 |
+| 어느 쪽도 미달 | 해당 구간 배치 불가 → `common` 후보 |
+
+### 5.2 ④ reachability
+
+`cores[].type == "stair"` 셀을 출발점으로 `CORRIDOR` + `FREE` 위 4방향 BFS.
+거리 = 셀 수 × `grid_mm` / 1000 (m).
+
+한계값 선택:
+
+```
+limit = highrise_m   if building.floors_total >= 16 and floor >= 16
+        fire_resistant_m  if building.fire_resistant
+        base_m            otherwise
+```
+
+### 5.3 ⑤ place
+
+- 복도에 면한 셀부터 유닛 충전. 유닛 깊이는 복도 수직 방향 10셀 고정.
+- **스캔 순서**: 좌상단부터 행 우선(row-major). 동점이면 인덱스 낮은 쪽.
+- 난수 없음. 같은 입력 → 같은 배치.
+
+전략별 차이:
+
+| 전략 | 규칙 |
+|---|---|
+| `supply` (공급우선형) | `youth` 우선 충전 |
+| `balanced` (균형형) | `youth` : `newlywed` 교대 배치 |
+| `minimal` (저개입형) | **샤프트 최근접 셀부터 충전** — 설비 재사용률 최대화 |
+
+### 5.4 ⑥ daylight
+
+유닛별로 접한 외벽 구간과 `windows` 를 교집합해 창 길이를 구한다.
+
+```
+window_area = Σ(교집합 길이) × window.height
+required    = unit.area_m2 × rules.daylight.area_ratio
+pass        = window_area >= required
+```
+
+창 접면이 0 인 유닛은 즉시 탈락 → `common` 후보.
+거리 기반 값(창에서 유닛 최심부까지 깊이)은 `depth_from_window_m` 로 **기록만** 한다
+(법정 요건 아님, 거주성 보조지표).
+
+### 5.5 ⑧ caps
+
+```
+plan    = Σ 층별 placed 수
+parking = floor(building.parking_existing / coef)      // coef: units 전용면적으로 결정
+septic  = floor(septic_capacity_m3 / (persons_per_unit × load_lpcd / 1000))
+
+supply     = min(plan, parking, septic)
+bottleneck = argmin
+```
+
+---
+
+## 6. 출력 규격
+
+### 6.1 `result.json`
+
+```jsonc
+{
+  "meta": {
+    "generated_at": "2026-08-13T10:00:00+09:00",   // 회귀 비교에서 제외
+    "rules_version": "2026-08-07",
+    "strategy": "balanced",
+    "input_hash": {
+      "building.json": "sha256:...",
+      "floor_plan_05.json": "sha256:...",
+      "rules.json": "sha256:...",
+      "units.json": "sha256:..."
+    },
+    "grid_mm": 600,
+    "grid_origin_mm": [0, 0]
+  },
+  "per_floor": [
+    {
+      "floor": 5,
+      "corridor_type": "double",
+      "units": [
+        {
+          "type": "youth",
+          "rect_mm": [1200, 600, 3000, 6000],
+          "daylight_ratio": 0.125,
+          "egress_dist_m": 22.8,
+          "shaft_dist_m": 9.6,
+          "depth_from_window_m": 6.0,
+          "ok": true
+        }
+      ],
+      "common_areas": [{ "rect_mm": [...], "reason": "no_window" }],
+      "rejected":     [{ "rect_mm": [...], "reason": "egress_over_limit" }]
+    }
+  ],
+  "caps": {
+    "plan": 176, "parking": 60, "septic": 88,
+    "supply": 60, "bottleneck": "parking"
+  },
+  "quantities": {
+    "demo_wall_m": 0.0,
+    "new_wall_m": 412.8,
+    "shaft_reuse_ratio": 0.62,
+    "septic_shortfall_m3": 0.0,
+    "parking_shortfall": 0
+  },
+  "verdict": {
+    "grade": "조건부 검토",
+    "reasons": ["주차 기준 상한이 평면 상한의 34%로 병목", "정화조 여유 있음"]
+  }
+}
+```
+
+`quantities` 에 단가·금액 필드는 없다. 총사업비는 대시보드에서
+사용자 입력 단가 × 물량으로 계산해 표시하며 "단가는 사용자 입력"임을 화면에 명시한다.
+
+### 6.2 SVG
+
+층별 1개. 레이어 색상 구분:
+
+| 요소 | 표현 |
+|---|---|
+| 외벽 / 코어 / 샤프트 / 기둥 | 검정 계열 |
+| 복도 | 회색 면 |
+| 배치 유닛 | 유형별 색, 라벨에 전용면적 |
+| 공용 전환 영역 | 해칭 + 사유 |
+| 탈락 구역 | 사유별 색 (채광 / 피난 / 깊이 부족) |
+
+---
+
+## 7. 테스트
+
+### 7.1 회귀 (골든케이스)
+
+손으로 검산되는 인공 평면. 기대값을 고정한다.
+
+| # | 평면 | 기대 |
+|---|---|---|
+| G1 | 30×12m, 중앙 코어 1개, 사면 통창 | **세대 0** — 복도 1.8m 제외 시 양옆 깊이 5.1m < 6m |
+| G2 | 30×15m, 중앙 코어 1개, 사면 통창 | 중복도 성립 (양옆 6.6m) |
+| G3 | 창 없는 내부 구획 포함 | 해당 유닛 `no_window` 탈락 |
+| G4 | 코어 1개, 장변 60m | `all_cores` 무관, 원단부 `egress_over_limit` |
+| G5 | 코어 2개 대각 배치 | `all_cores` true/false 로 결과가 달라짐 |
+
+### 7.2 사례 대조 (테스트 아님)
+
+에스키스 가산. 실제 층당 11~12세대와 **다르게 나오는 것이 정상**이며 차이와 원인이
+제안서 내용이 된다. 테스트에 포함하면 맞추려고 파라미터를 조정하게 되므로 분리한다.
+
+### 7.3 결정론
+
+`meta.generated_at` 을 제외한 `result.json` 전체가 같은 입력에 대해 바이트 단위로 동일해야 한다.
+
+---
+
+## 8. 미구현 / 미확정
+
+| 항목 | 상태 |
+|---|---|
+| IFC 입력 어댑터 | 미구현. 제안서상 아키텍처로만 존치 |
+| `septic.persons_per_unit`, `load_lpcd` | **미확정** — 하수도법 시행령 별표 확인 필요 |
+| 용도지역별 주택 허용 조건 | **미확정** — 상업지역·준공업지역 차이 |
+| 내부 벽 입력 | 규격 없음. 저개입형을 설비 재사용률로 재정의해 회피 |
+| 반자 높이 판정 | `building.floor_height_mm` 입력만 받고 필터로 사용 |
