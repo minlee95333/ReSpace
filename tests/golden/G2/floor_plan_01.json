@@ -1,6 +1,7 @@
 {
   "_about": "30 × 15m, 중앙 코어 1개, 사면 통창. 25행 × 50열.",
   "_expected": "복도 3행을 빼면 아래 11행 / 위 11행 = 각 6.6m. 유닛 깊이 10행(6m) 이상이므로 corridor.type == 'double'.",
+  "status": "synthetic",
   "floor": 1,
   "unit": "mm",
   "boundary": [

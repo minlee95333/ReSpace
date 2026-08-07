@@ -44,3 +44,7 @@ desktop.ini
 *.backup
 *.bak-*
 *.bak
+
+# Railway 빌드 산출물
+public/
+build/

@@ -1,6 +1,7 @@
 {
   "_about": "60 × 15m, 계단 2개소가 좌우 양 끝. 100열 × 25행.",
   "_expected": "all_cores=false 면 가장 가까운 계단만 보므로 전 구역이 한계 이내(0셀 초과). all_cores=true 면 좌측 셀이 우측 계단까지 52m 를 넘어 실격되고, 그 반대도 마찬가지다. 계단이 2개라서 불리해지는 역설을 보여주는 케이스.",
+  "status": "synthetic",
   "floor": 1,
   "unit": "mm",
   "boundary": [

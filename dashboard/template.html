@@ -145,6 +145,19 @@ const B = () => D.buildings[state.building];
 const S = () => B().strategies[state.strategy ?? B().recommended];
 const TABS = ["① 후보 건물", "② 건물 상세분석", "③ 대안 비교", "④ 검토보고서"];
 
+/* 도면 출처 배너 — 결과를 어디까지 믿을 수 있는지가 수치보다 먼저다 */
+function provenance() {
+  const b = B();
+  if (b.trustworthy) return "";
+  const strong = b.plan_status === "placeholder"
+    ? "이 건물의 도면은 <b>형상 예시</b>다. 실제 건물 형상이 아니므로 아래 수치를 사례 대조나 의사결정에 쓸 수 없다."
+    : "이 건물은 <b>엔진 검증용 인공 평면</b>이다. 실재하는 건물이 아니다.";
+  return `<div class="warnbox" style="border-color:var(--bad);background:#fdf0ef">
+    ${strong} (${esc(b.plan_status_label)})
+    ${b.source_note ? `<div class="note" style="margin-top:4px">${esc(b.source_note)}</div>` : ""}
+  </div>`;
+}
+
 function headline() {
   const b = B(), s = S();
   const blocked = s.caps.axes.filter(a => a.value === null);
@@ -178,7 +191,9 @@ function viewList() {
     const s = b.strategies[b.recommended];
     const blocked = s.caps.axes.filter(a => a.value === null).map(a => a.label);
     return `<tr class="click" data-b="${i}">
-      <td><b>${esc(b.name)}</b><div class="note">${esc(b.use)} · 지상 ${b.floors_total}층</div></td>
+      <td><b>${esc(b.name)}</b>
+        ${b.trustworthy ? "" : `<span class="badge b-bad" style="margin-left:6px">${esc(b.plan_status_label)}</span>`}
+        <div class="note">${esc(b.use)} · 지상 ${b.floors_total}층</div></td>
       <td class="num">${fmt(s.caps.supply)}</td>
       <td><span class="badge ${BOTTLENECK_CLASS[s.caps.bottleneck_label] || "b-mute"}">${esc(s.caps.bottleneck_label)}</span></td>
       <td>${blocked.length ? `<span class="badge b-warn">${esc(blocked.join(", "))} 미확보</span>` : `<span class="badge b-ok">없음</span>`}</td>
@@ -420,6 +435,7 @@ function render() {
     `<button class="${i === state.tab ? "on" : ""}" data-t="${i}">${t}</button>`).join("");
   headline();
   document.getElementById("view").innerHTML =
+    (state.tab === 0 ? "" : provenance()) +
     [viewList, viewDetail, viewCompare, viewReport][state.tab]();
 
   document.querySelectorAll("#nav button").forEach(x =>

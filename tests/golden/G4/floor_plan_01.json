@@ -1,6 +1,7 @@
 {
   "_about": "60 × 15m, 계단 1개소가 좌측 끝에 붙어 있다. 100행... 아니 100열 × 25행.",
   "_expected": "우측 원단부까지 약 54.6m 로 내화구조 한계 50m 를 넘는다. over_limit_cells > 0 이고 우측에는 세대가 놓이지 않는다.",
+  "status": "synthetic",
   "floor": 1,
   "unit": "mm",
   "boundary": [

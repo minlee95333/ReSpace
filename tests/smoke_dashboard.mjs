@@ -64,6 +64,11 @@ for (let b = 0; b < D.buildings.length; b++) {
     expect(!v.includes("NaN"), `${bd.name} 탭 ${TABS[t]} 에 NaN`);
     expect(h.includes("공급 가능 세대수") && h.includes("병목 축") && h.includes("위험 / 판정"),
       `${bd.name} 탭 ${TABS[t]} 헤드라인 3종 누락`);
+    // 신뢰할 수 없는 도면이면 ①을 제외한 모든 화면에 경고가 떠야 한다
+    if (!bd.trustworthy && t > 0) {
+      expect(v.includes(bd.plan_status_label),
+        `${bd.name} 탭 ${TABS[t]} 출처 경고 누락`);
+    }
   }
   // 전략 전환
   for (const s of sids) {

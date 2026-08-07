@@ -61,6 +61,31 @@ class TestValidation(unittest.TestCase):
             FloorPlan.from_dict(d, 600)
         self.assertIn("격자", str(ctx.exception))
 
+    def test_출처가_없으면_실패한다(self):
+        # 도면 출처를 밝히지 않은 결과는 어디까지 믿어도 되는지 알 수 없다.
+        d = load_json(f"{ESQUISSE}/floor_plan_05.json")
+        del d["status"]
+        with self.assertRaises(ContractError) as ctx:
+            FloorPlan.from_dict(d, 600)
+        self.assertIn("status", str(ctx.exception))
+
+    def test_알수없는_출처값은_실패한다(self):
+        d = load_json(f"{ESQUISSE}/floor_plan_05.json")
+        d["status"] = "대충그림"
+        with self.assertRaises(ContractError):
+            FloorPlan.from_dict(d, 600)
+
+    def test_플레이스홀더는_신뢰할_수_없다고_표시된다(self):
+        fp = FloorPlan.from_dict(load_json(f"{ESQUISSE}/floor_plan_05.json"), 600)
+        self.assertEqual(fp.status, "placeholder")
+        self.assertFalse(fp.is_trustworthy)
+        self.assertIn("사례 대조에 쓸 수 없음", fp.status_label)
+
+    def test_인공_평면도_신뢰_대상이_아니다(self):
+        fp = FloorPlan.from_dict(load_json("tests/golden/G2/floor_plan_01.json"), 600)
+        self.assertEqual(fp.status, "synthetic")
+        self.assertFalse(fp.is_trustworthy)
+
     def test_알수없는_코어_타입은_실패한다(self):
         d = load_json(f"{ESQUISSE}/floor_plan_05.json")
         d["cores"][0]["type"] = "escalator"

@@ -297,9 +297,19 @@ class Window:
         return int(round((dx * dx + dy * dy) ** 0.5))
 
 
+#: 도면 출처. 결과를 어디까지 믿을 수 있는지가 여기서 갈린다.
+PLAN_STATUS = {
+    "survey": "원본 도면 · 실측",
+    "reconstructed": "공개 정보 기반 재구성",
+    "synthetic": "인공 검증 평면 — 실제 건물 아님",
+    "placeholder": "형상 예시 — 결과를 사례 대조에 쓸 수 없음",
+}
+
+
 @dataclass(frozen=True)
 class FloorPlan:
     floor: int
+    status: str
     boundary: tuple[Point, ...]
     cores: tuple[Core, ...]
     shafts: tuple[Rect, ...]
@@ -312,6 +322,15 @@ class FloorPlan:
         ys = [p[1] for p in self.boundary]
         return min(xs), min(ys), max(xs), max(ys)
 
+    @property
+    def status_label(self) -> str:
+        return PLAN_STATUS[self.status]
+
+    @property
+    def is_trustworthy(self) -> bool:
+        """이 도면의 결과를 사례 대조·제안서에 쓸 수 있는가."""
+        return self.status in ("survey", "reconstructed")
+
     def stair_cores(self) -> tuple[Core, ...]:
         return tuple(c for c in self.cores if c.type == "stair")
 
@@ -323,6 +342,14 @@ class FloorPlan:
         unit = d.get("unit", "mm")
         if unit != "mm":
             raise ContractError(f"{w}: 좌표 단위는 mm 만 지원한다 (받은 값: {unit})")
+
+        status = _require(d, "status", w)
+        if status not in PLAN_STATUS:
+            raise ContractError(
+                f"{w}: status 는 {'/'.join(PLAN_STATUS)} 중 하나여야 한다 "
+                f"(받은 값: {status}). 도면 출처를 밝히지 않은 결과는 "
+                f"어디까지 믿어도 되는지 알 수 없다."
+            )
 
         boundary = [tuple(p) for p in _require(d, "boundary", w)]
         if len(boundary) < 4:
@@ -369,6 +396,7 @@ class FloorPlan:
 
         return FloorPlan(
             floor=floor,
+            status=status,
             boundary=tuple(boundary),
             cores=tuple(cores),
             shafts=tuple(shafts),

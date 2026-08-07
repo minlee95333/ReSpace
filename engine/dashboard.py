@@ -17,6 +17,9 @@ from .caps import AXIS_LABEL
 from .emit import build_result, build_svg
 from .pipeline import Analysis
 
+#: 신뢰도가 낮은 순. 여러 층의 출처가 섞이면 가장 약한 쪽으로 표시한다.
+PLAN_ORDER = ("placeholder", "synthetic", "reconstructed", "survey")
+
 MARKER = "<!--RESPACE_DATA-->"
 TEMPLATE = Path(__file__).resolve().parent.parent / "dashboard" / "template.html"
 
@@ -51,12 +54,19 @@ def _building_payload(
 ) -> dict:
     any_a = next(iter(analyses.values()))
     b = any_a.inputs.building
+    plans = any_a.inputs.floors
+    # 가장 약한 출처를 대표로 삼는다. 한 층이라도 예시 형상이면 그 건물의 결과는
+    # 사례 대조에 쓸 수 없다.
+    weakest = min(plans, key=lambda f: PLAN_ORDER.index(f.status))
     return {
         "name": b.name,
         "use": b.use,
         "floors_total": b.floors_total,
         "floors_analyzed": [f.floor for f in any_a.floors],
         "source_note": b.source_note,
+        "plan_status": weakest.status,
+        "plan_status_label": weakest.status_label,
+        "trustworthy": weakest.is_trustworthy,
         "recommended": recommended,
         "recommend_reasons": list(reasons),
         "strategies": {k: _strategy_payload(a) for k, a in analyses.items()},

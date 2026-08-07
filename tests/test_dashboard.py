@@ -86,6 +86,23 @@ class TestPayload(unittest.TestCase):
                 for svg in s["svgs"].values():
                     self.assertTrue(svg.startswith("<svg"))
 
+    def test_도면_출처가_건물마다_들어간다(self):
+        for b in self.p["buildings"]:
+            self.assertIn(b["plan_status"],
+                          ("placeholder", "synthetic", "reconstructed", "survey"))
+            self.assertTrue(b["plan_status_label"])
+            self.assertIsInstance(b["trustworthy"], bool)
+
+    def test_플레이스홀더_건물은_신뢰_불가로_표시된다(self):
+        esq = next(b for b in self.p["buildings"] if "에스키스" in b["name"])
+        self.assertEqual(esq["plan_status"], "placeholder")
+        self.assertFalse(esq["trustworthy"])
+
+    def test_인공_평면_건물도_신뢰_불가로_표시된다(self):
+        g2 = next(b for b in self.p["buildings"] if b["name"].startswith("G2"))
+        self.assertEqual(g2["plan_status"], "synthetic")
+        self.assertFalse(g2["trustworthy"])
+
     def test_단가나_금액이_들어있지_않다(self):
         flat = json.dumps(self.p, ensure_ascii=False)
         for word in ("단가 ", "총사업비", "원/", "만원"):

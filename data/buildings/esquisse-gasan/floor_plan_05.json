@@ -15,6 +15,7 @@
     "층 간 원점은 일치해야 한다."
   ],
 
+  "status": "placeholder",
   "floor": 5,
   "unit": "mm",
 
