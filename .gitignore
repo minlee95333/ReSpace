@@ -48,3 +48,6 @@ desktop.ini
 # Railway 빌드 산출물
 public/
 build/
+
+# Notion 캐시 (TTL 5분, 재생성 가능)
+.claude/cache/
