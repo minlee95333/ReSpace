@@ -31,6 +31,11 @@ Re:Space 작업이 거기에 섞이면 되돌리기 어렵다. 따라서:
 - 격리 기준 페이지: `Re:Space`
 - 페이지 ID: `3b54987af0d880358f96d30bd53f844f`
 - URL: https://app.notion.com/p/Re-Space-3b54987af0d880358f96d30bd53f844f
+- 워크스페이스: **이승민의 Notion** (minlee95333@inu.ac.kr)
+
+MCP 인증이 다른 워크스페이스로 붙으면 페이지 ID 가 존재하지 않아 조용히 엉뚱한 곳에
+쓰게 된다. 작업 전 `notion-fetch` 에 `self` 를 넘겨 워크스페이스가 위와 같은지 확인하고,
+다르면 중단하고 사용자에게 알린다. `settings.json > notion.workspace` 에도 같은 값이 있다.
 
 `/notion init` 으로 만드는 DB 8개는 **반드시 이 페이지의 하위**에 생성한다.
 상위 페이지를 지정하지 않으면 워크스페이스 루트에 생성되므로, `parent` 를 항상 명시할 것.
@@ -64,13 +69,35 @@ MCP 서버를 `notion` 이외의 이름으로 등록했다면 접두사가 달�
 2. `/notion status`, `/notion diff` 로 검증, `/notion push` 를 수동으로 몇 번 실행
 3. 결과가 예상대로면 `enabled` 와 자동 플래그를 하나씩 켠다
 
-### 4. 중복 기록 회피
+### 4. `/notion init` 이후 알아야 할 것 (2026-08-07 완료)
 
-SessionEnd 훅이 Obsidian(`C:\Users\wf\iAm`)에 세션 로그를 남긴다.
+DB 8개는 `--db-only` 로 생성됐고 **행은 전부 0개**다. Relation 은 전부 DUAL(양방향)로,
+Projects 에 나머지 7개 DB 의 역방향 속성이 자동 생성돼 있다.
+
+**`notion.data_sources` 를 반드시 쓸 것.** MCP 의 `notion-query-data-sources` 는
+database ID 가 아니라 **data source ID** 를 요구한다. `settings.json` 에
+`notion.databases`(database ID)와 `notion.data_sources`(data source ID)가 같은 8개 키로
+나란히 들어 있다. SKILL.md 는 `data_sources` 의 존재를 모르므로(원본 보존 원칙상 수정하지
+않았다), 쿼리할 때는 SKILL.md 대신 이 규칙을 따른다:
+
+| 용도 | 쓸 값 |
+|---|---|
+| 행 조회 (`notion-query-data-sources`) | `notion.data_sources.<db>` |
+| 페이지 생성 시 parent, DB 자체 조회 | `notion.databases.<db>` |
+
+**Tasks DB 의 Task ID 접두사는 `TSK`** 다. 스펙상 `T` 였으나 Notion 이 1글자 접두사를
+거부했다(`prefix must start with a letter, followed by one or more (up to 9)
+alphanumeric characters`). 문서·스크립트에서 `T-1` 형식을 가정하지 말 것.
+
+### 5. 중복 기록 회피
+
+SessionEnd 훅이 세션 로그를 이 저장소의 `obsidian/` 에 쓰고, vault 쪽
+`C:\Users\wf\iAm\AI-작업로그\프로젝트\ReSpace\repository` 로 링크한다.
+이 폴더는 설계상 저장소에 함께 커밋한다(crane-sim 등 다른 프로젝트와 같은 구조).
 Notion 의 Activity Log DB 를 함께 켜면 같은 내용이 두 곳에 쌓인다.
 서술형 세션 로그는 Obsidian, 태스크·스프린트·게이트 같은 구조화 데이터는 Notion 으로 나눈다.
 
-### 5. 공개 전환 시
+### 6. 공개 전환 시
 
 `/notion init` 은 DB ID 8개를 `.claude/settings.json` 에 기록하며, 이 파일은 git 추적 대상이다.
 현재 저장소가 Private 이라 문제되지 않지만, 공개로 전환할 때는 DB ID 를

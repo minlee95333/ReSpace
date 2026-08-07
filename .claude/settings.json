@@ -625,15 +625,27 @@
         "fallback": "latest_wins"
       }
     },
+    "parent_page_id": "3b54987af0d880358f96d30bd53f844f",
+    "workspace": "이승민의 Notion",
     "databases": {
-      "projects": "",
-      "tasks": "",
-      "gates": "",
-      "documents": "",
-      "sprints": "",
-      "tech_debt": "",
-      "feedback": "",
-      "activity_log": ""
+      "projects": "bca4143913104d95b86cb4d7cb54693a",
+      "tasks": "113f0078fd794fa0864b45551d1b3772",
+      "gates": "0faa99f1f3534cc8ad6fac9360722bab",
+      "documents": "febf7d7efb4c414d8d1a4992e5eded0b",
+      "sprints": "ff822b9067f441458c54c6cc117a1b66",
+      "tech_debt": "f92ef9e14f294953ac4300b4842eb495",
+      "feedback": "8904b410597b420aac7c88e0795f8657",
+      "activity_log": "c7bdebf3b7e2426882ac4608b55e8d5e"
+    },
+    "data_sources": {
+      "projects": "39ee1ef8-21c8-4474-9949-2c31709c96a2",
+      "tasks": "f8bd24da-58ff-4c68-a599-c310636be2e5",
+      "gates": "1725b2f9-611c-484a-ae46-08084751c95e",
+      "documents": "1fe0ed0d-e42a-430b-9910-f77c359846e8",
+      "sprints": "f00e56e9-ba8d-4907-b457-e220f9d498de",
+      "tech_debt": "83b6bfda-933b-4867-b7cd-3b1af56cc7a2",
+      "feedback": "e3ce25b0-1209-4748-8c02-23b2dc99dbec",
+      "activity_log": "dd81cf41-8046-40d7-b384-5b22317cd37c"
     },
     "cache": {
       "dir": ".claude/cache/notion",
