@@ -30,6 +30,10 @@ class PlacedUnit:
     side: Side
     egress_dist_m: float
     shaft_dist_cells: int
+    # ⑥ daylight 가 채운다. 배치 시점에는 None.
+    window_len_mm: int | None = None
+    daylight_ratio: float | None = None
+    depth_from_window_m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -76,16 +80,55 @@ def shaft_distance_field(grid: Grid) -> list[list[int | None]]:
     return dist
 
 
-def _unit_cells(
-    corridor: CorridorResult, side: Side, lane: int, w_cells: int, d_cells: int
-) -> tuple[int, int, int, int]:
-    """(축, 면, 레인) → (r0, c0, rows, cols). 깊이는 복도 수직 방향."""
+def _at(grid: Grid, axis: str, lane: int, depth: int) -> CellState:
+    return grid.cells[depth][lane] if axis == "h" else grid.cells[lane][depth]
+
+
+def _outer_limit(
+    grid: Grid, corridor: CorridorResult, side: Side, lane: int
+) -> int | None:
+    """복도 밴드에서 바깥으로 연속된 FREE 구간의 가장 바깥 인덱스.
+
+    유닛을 외벽에 붙이기 위한 기준점이다. 즉시 막혀 있으면 None.
+    """
     lo, hi = corridor.band
+    extent = grid.rows if corridor.axis == "h" else grid.cols
+    step = 1 if side == "high" else -1
+    p = (hi + 1) if side == "high" else (lo - 1)
+    last = None
+    while 0 <= p < extent and _at(grid, corridor.axis, lane, p) == CellState.FREE:
+        last = p
+        p += step
+    return last
+
+
+def _unit_cells(
+    grid: Grid,
+    corridor: CorridorResult,
+    side: Side,
+    lane: int,
+    w_cells: int,
+    d_cells: int,
+) -> tuple[int, int, int, int] | None:
+    """(면, 레인) → 외벽에 붙인 유닛 셀 사각형. 깊이는 복도 수직 방향.
+
+    복도가 아니라 **외벽**을 기준으로 붙인다. 그래야 유닛이 창에 면하고,
+    복도 쪽에 남는 띠가 창에서 가장 먼 공간이 되어 공용시설 후보로 간다 (설계 4.6절).
+    """
+    lane_count = grid.cols if corridor.axis == "h" else grid.rows
+    if lane + w_cells > lane_count:
+        return None
+    limits = [
+        _outer_limit(grid, corridor, side, j) for j in range(lane, lane + w_cells)
+    ]
+    if any(v is None for v in limits):
+        return None
+    # 여러 레인에 걸치므로 가장 얕은 레인에 맞춘다 (보수적).
+    anchor = min(limits) if side == "high" else max(limits)
+    start = anchor - d_cells + 1 if side == "high" else anchor
     if corridor.axis == "h":
-        r0 = hi + 1 if side == "high" else lo - d_cells
-        return r0, lane, d_cells, w_cells
-    c0 = hi + 1 if side == "high" else lo - d_cells
-    return lane, c0, w_cells, d_cells
+        return start, lane, d_cells, w_cells
+    return lane, start, w_cells, d_cells
 
 
 def _fits(
@@ -157,8 +200,8 @@ def place(
             for lane in range(lanes):
                 for ti, t in enumerate(types):
                     w, d = t.cells(rules.grid_mm)
-                    cells = _unit_cells(corridor, side, lane, w, d)
-                    if not _fits(grid, egress, occupied, cells):
+                    cells = _unit_cells(grid, corridor, side, lane, w, d)
+                    if cells is None or not _fits(grid, egress, occupied, cells):
                         continue
                     if max_shaft is not None and _min_shaft(field, cells) > max_shaft:
                         continue

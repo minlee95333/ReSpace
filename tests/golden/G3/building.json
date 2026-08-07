@@ -1,0 +1,15 @@
+{
+  "_about": "G3 — 채광 탈락 두 경로를 만드는 평면. 외벽 창 미접(no_window)과 창면적 부족(daylight_short).",
+  "name": "G3 채광 탈락 평면",
+  "use": "업무시설",
+  "floors_total": 5,
+  "floors_residential": [1, 5],
+  "seismic": true,
+  "fire_resistant": true,
+  "floor_height_mm": 3000,
+  "approval_year": 2010,
+  "gfa_m2": 3780.0,
+  "parking_existing": 30,
+  "septic_capacity_m3": 45.0,
+  "source_note": "인공 테스트 평면"
+}

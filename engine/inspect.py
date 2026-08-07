@@ -11,8 +11,10 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .common import collect, summarize
 from .contracts import ContractError, load_inputs
 from .corridor import generate
+from .daylight import evaluate
 from .egress import compute as compute_egress
 from .grid import CellState, gridify
 from .place import place
@@ -28,13 +30,22 @@ GLYPH = {
 
 LEGEND = (
     "  . 사용가능   # 코어   S 샤프트   o 기둥   = 복도   (공백) 외부\n"
-    "  y 청년형 18.0㎡   n 신혼형 28.8㎡   x 피난 한계 초과"
+    "  y 청년형 18.0㎡   n 신혼형 28.8㎡   x 피난 한계 초과   "
+    "w 창 미접 탈락   d 채광 부족 탈락"
 )
 
+_REJECT_GLYPH = {"no_window": "w", "daylight_short": "d"}
 
-def render(grid, egress=None, placement=None) -> str:
+
+def render(grid, egress=None, placement=None, daylight=None) -> str:
     """위쪽이 +y 가 되도록 행을 뒤집어 출력한다."""
     art = [[GLYPH[grid.cells[r][c]] for c in range(grid.cols)] for r in range(grid.rows)]
+
+    def fill(cells, ch):
+        r0, c0, rows, cols = cells
+        for r in range(r0, r0 + rows):
+            for c in range(c0, c0 + cols):
+                art[r][c] = ch
 
     if egress is not None:
         for r in range(grid.rows):
@@ -44,11 +55,12 @@ def render(grid, egress=None, placement=None) -> str:
 
     if placement is not None:
         for u in placement.units:
-            r0, c0, rows, cols = u.cells
-            ch = u.type_id[0]
-            for r in range(r0, r0 + rows):
-                for c in range(c0, c0 + cols):
-                    art[r][c] = ch
+            fill(u.cells, u.type_id[0])
+
+    # 채광 탈락은 배치 위에 덮어써 어디가 왜 빠졌는지 보이게 한다.
+    if daylight is not None:
+        for u in daylight.rejected:
+            fill(u.cells, _REJECT_GLYPH.get(u.reason, "?"))
 
     return "\n".join("".join(art[r]) for r in range(grid.rows - 1, -1, -1))
 
@@ -114,21 +126,40 @@ def main(argv=None) -> int:
         print(f"  피난   한계 {em.limit_m}m · {mode} · 계단 {em.stair_count}개소")
         print(f"         도달 {em.reachable_cells}셀 중 한계 초과 {em.over_limit_cells}셀")
 
-        plans = {}
+        plans, lights, commons = {}, {}, {}
         for sid in inp.units.strategies:
-            plans[sid] = place(grid, res, em, inp.rules, inp.units, sid)
-        print("  대안   " + " | ".join(
-            f"{inp.units.strategies[s].label} {p.count}세대"
-            f"(재사용 {p.shaft_reuse_ratio:.0%})" for s, p in plans.items()))
-        for s, p in plans.items():
+            pr = place(grid, res, em, inp.rules, inp.units, sid)
+            dl = evaluate(fp, inp.rules, inp.units, pr)
+            plans[sid] = pr
+            lights[sid] = dl
+            commons[sid] = collect(grid, em, dl.units, dl.rejected)
+
+        print("  대안   배치 → 채광통과 | 유형 구성 | 설비 재사용")
+        for s, pr in plans.items():
+            dl = lights[s]
             mix = ", ".join(f"{inp.units.by_id(k).label} {v}"
-                            for k, v in sorted(p.count_by_type().items()))
-            print(f"         {inp.units.strategies[s].label:8s} {mix or '없음'}")
+                            for k, v in sorted(pr.count_by_type().items()))
+            print(f"         {inp.units.strategies[s].label:8s} "
+                  f"{pr.count:3d} → {dl.kept:3d}세대  {mix or '없음':24s} "
+                  f"재사용 {pr.shaft_reuse_ratio:.0%}")
+
+        dl = lights[args.strategy]
+        if dl.rejected:
+            counts: dict[str, int] = {}
+            for r in dl.rejected:
+                counts[r.reason] = counts.get(r.reason, 0) + 1
+            print(f"  채광   탈락 {len(dl.rejected)}세대 — "
+                  + ", ".join(f"{k} {v}" for k, v in counts.items()))
+            print(f"         예: {dl.rejected[0].detail}")
+
+        s = summarize(commons[args.strategy])
+        if s:
+            print("  공용   " + ", ".join(f"{k} {v}㎡" for k, v in s.items()))
 
         if not args.no_art:
             print()
             print(f"  [{inp.units.strategies[args.strategy].label}]")
-            print(render(grid, em, plans.get(args.strategy)))
+            print(render(grid, em, plans[args.strategy], dl))
             print(LEGEND)
 
     return 0
