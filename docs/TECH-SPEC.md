@@ -420,7 +420,31 @@ python -m engine.report  <dir> [<dir> ...] [--out DIR]  result.json + SVG + dash
 run.bat check|report|test ...                           비개발자용 래퍼
 ```
 
-### 6.5 대시보드 검증
+### 6.5 배포
+
+**https://respace-production.up.railway.app** (Railway, 프로젝트 `respace`)
+
+```
+railway up            재배포 (한 줄)
+railway domain        도메인 확인
+railway logs          로그
+railway usage         크레딧 사용량
+```
+
+`railway.json`
+
+| 단계 | 명령 |
+|---|---|
+| build | `python -m unittest discover -s tests -t . && python -m engine.report … --dashboard public/index.html` |
+| start | `python -m http.server $PORT --directory public` |
+
+**빌드 단계에서 테스트를 먼저 돌린다.** 실패하면 배포가 중단되므로 틀린 수치가
+공개 URL 로 나가지 않는다. 의존성 0(`requirements.txt` 는 Nixpacks 인식용),
+Python 3.12 고정(`.python-version`).
+
+`public/`, `build/` 는 gitignore 대상이라 업로드되지 않고 빌드 시점에 생성된다.
+
+### 6.6 대시보드 검증
 
 브라우저 확장이 없어도 검증 가능한 범위를 테스트로 고정했다.
 

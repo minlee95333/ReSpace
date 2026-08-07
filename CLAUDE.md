@@ -26,7 +26,13 @@
 - **8/14 이후 코드 동결.** 제안서 11일과 서류 4일을 침범하지 않는다.
 
 - 저장소: https://github.com/minlee95333/ReSpace (Private)
+- **공개 대시보드: https://respace-production.up.railway.app** (Railway `respace`, `railway up` 으로 재배포)
 - 프레임워크: open-claude-office 전체 모듈 (agents 48 / skills 32 / commands 16 / hooks 10)
+
+공개 URL 은 누구나 접근한다. 대시보드에는 도면 좌표와 분석 수치가 그대로 들어가므로,
+**실제 건물 데이터를 넣고 재배포하기 전에 사용자에게 확인한다.**
+도면에는 `status` 필드로 출처(`survey`/`reconstructed`/`synthetic`/`placeholder`)를 반드시
+밝히며, 신뢰할 수 없는 도면은 화면에 경고가 뜬다.
 
 ---
 
