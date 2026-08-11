@@ -26,9 +26,19 @@ class TestGoldenG1(unittest.TestCase):
 
     def test_깊이_수치(self):
         _, res = run("tests/golden/G1")
-        # 20행 - 복도 3행 = 17행, 코어 중심 기준으로 아래 8행 / 위 9행
-        self.assertEqual(res.depth_low_cells, 8)
+        # 중복도 폭(3행)으로는 양쪽 다 미달이므로 편복도 폭(2행)으로 다시 놓는다.
+        # 20행 - 복도 2행 = 18행이 대칭으로 갈려 양쪽 9행.
+        self.assertEqual(res.width_cells, 2)
+        self.assertEqual(res.depth_low_cells, 9)
         self.assertEqual(res.depth_high_cells, 9)
+        # 폭을 줄여도 유닛 깊이 10행에는 여전히 못 미친다 — G1 의 정답은 그대로 0세대다.
+        self.assertEqual(res.type, "none")
+
+    def test_편복도_폭으로_다시_놓아도_판정이_뒤집히지_않는다(self):
+        """2패스가 끝난다는 근거. 폭이 좁아지면 깊이는 늘 뿐 중복도가 새로 생기지 않는다."""
+        _, res = run("tests/golden/G1")
+        self.assertLess(res.width_cells, 3)
+        self.assertLess(res.depth_low_cells, res.need_cells)
 
 
 class TestGoldenG2(unittest.TestCase):
@@ -37,6 +47,8 @@ class TestGoldenG2(unittest.TestCase):
     def test_중복도_성립(self):
         _, res = run("tests/golden/G2")
         self.assertEqual(res.type, "double")
+        # 중복도이므로 1패스에서 확정된다 — 좁은 폭으로 내려가지 않는다.
+        self.assertEqual(res.width_cells, 3)
         self.assertEqual(res.depth_low_cells, 11)
         self.assertEqual(res.depth_high_cells, 11)
         self.assertEqual(res.coverage_low, 1.0)

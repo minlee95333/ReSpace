@@ -21,9 +21,17 @@ from .place import PlacedUnit
 _NEIGHBORS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 #: 사유 우선순위. 여러 사유가 겹치면 위쪽이 이긴다.
-REASONS = ("egress_over_limit", "no_window", "daylight_short", "geometry")
+#: community 는 의무 설치라 '못 쓰는 자리'가 아니라 '써야 하는 자리'다. 맨 앞에 둔다.
+REASONS = (
+    "community",
+    "egress_over_limit",
+    "no_window",
+    "daylight_short",
+    "geometry",
+)
 
 REASON_LABEL = {
+    "community": "주민공동시설 (의무)",
     "egress_over_limit": "피난 보행거리 초과",
     "no_window": "외벽 창 미접",
     "daylight_short": "채광 창면적 부족",

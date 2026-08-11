@@ -90,8 +90,10 @@ def main(argv=None) -> int:
                if getattr(b, f) is None]
     if missing:
         print(f"미확정  building.json: {', '.join(missing)}")
-    if inp.rules.septic_persons_per_unit is None:
-        print("미확정  rules.json: septic 파라미터 — 정화조 축 계산 불가")
+    if b.septic_capacity_m3 is None and (b.gfa_m2 is None or not b.use):
+        print("미확정  정화조 — 용량(septic_capacity_m3) 도, "
+              "종전 용도 추정용 use/gfa_m2 도 없어 축 계산 불가")
+    print(f"주차   기준 모드 '{inp.rules.parking_mode}'")
 
     # 층 확장(floors_residential)은 하지 않는다. 이 도구는 입력 도면을 보는 용도다.
     for fp in inp.floors:

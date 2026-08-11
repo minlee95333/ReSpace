@@ -88,7 +88,17 @@ for (let b = 0; b < D.buildings.length; b++) {
 ctx.__go(3, 0, null, 0);
 expect(store.view.includes("단가는 사용자 입력"), "단가 사용자 입력 문구 없음");
 expect(store.view.includes("전문가의 현장조사"), "면책 문구 없음");
-expect(store.view.includes("미확보"), "미확보 축 표시 없음");
+
+// 미확보 축 표시는 실제로 축이 막힌 건물에서 확인한다. G2 는 3축이 모두 도므로
+// 에스키스(주차·정화조 입력 없음)를 본다.
+const blocked = D.buildings.findIndex((b) =>
+  Object.values(b.strategies).some((s) => !s.caps.complete)
+);
+expect(blocked >= 0, "미확보 축을 가진 건물이 없어 표시를 검증할 수 없다");
+if (blocked >= 0) {
+  ctx.__go(3, blocked, null, 0);
+  expect(store.view.includes("미확보"), "미확보 축 표시 없음");
+}
 
 // 헤드라인 수치가 caps.supply 와 일치하는지
 ctx.__go(0, 0, null, 0);

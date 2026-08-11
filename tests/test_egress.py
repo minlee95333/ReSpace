@@ -47,12 +47,30 @@ class TestG4(unittest.TestCase):
         self.assertAlmostEqual(steps, round(steps), places=6)
 
 
-class TestG5AllCoresSwitch(unittest.TestCase):
-    """계단 2개소가 양 끝. 스위치가 결과를 뒤집는다.
+class TestDefaultIsStatutory(unittest.TestCase):
+    """기본값은 조문이 정한 것이다 — 고를 문제가 아니었다 (미결정 ⑨ 종결).
 
-    all_cores=True 는 '직통계단 2개소 이상이면 모두 기준 충족'의 직역이며,
-    이 해석에서는 계단이 2개라서 오히려 불리해진다. 상식과 반대이므로
-    제안서에 쓸 값을 정하기 전에 양쪽을 비교한다.
+    건축법 시행령 제34조① 이 괄호 안에 정의를 박아 두었다:
+    '거실의 각 부분으로부터 **계단(거실로부터 가장 가까운 거리에 있는 1개소의
+    계단을 말한다)** 에 이르는 보행거리가 30미터 이하'.
+    """
+
+    def test_기본값은_false_다(self):
+        inp = load_inputs("tests/golden/G5", DATA)
+        self.assertFalse(inp.rules.egress.all_cores)
+
+    def test_기본값에서는_계단을_늘리면_유리해진다(self):
+        """max 로 두면 반대가 된다 — 더 안전한 건물을 벌주는 셈이다."""
+        _, _, one = run("tests/golden/G4")  # 계단 1개
+        _, _, two = run("tests/golden/G5")  # 계단 2개, 같은 크기 평면
+        self.assertLess(two.over_limit_cells, one.over_limit_cells)
+
+
+class TestG5AllCoresSwitch(unittest.TestCase):
+    """스위치는 남겨 둔다. 발주처가 더 엄격한 내부 기준을 요구하면 데이터만 바꾼다.
+
+    all_cores=True 는 '직통계단 2개소 이상이면 모두 기준 충족'의 직역인데,
+    이 해석에서는 계단이 2개라서 오히려 불리해진다 — 조문과도 상식과도 반대다.
     """
 
     def test_false_면_전_구역_통과(self):

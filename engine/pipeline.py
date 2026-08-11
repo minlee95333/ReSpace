@@ -10,8 +10,10 @@ from dataclasses import dataclass, replace
 
 from .caps import Caps, compute as compute_caps, verdict as make_verdict
 from .common import CommonArea, collect
+from .community import CommunityResult, apply as apply_community
 from .contracts import ContractError, FloorPlan, Inputs
 from .corridor import CorridorResult, generate
+from .exclude import ExclusionResult, check as check_exclusions
 from .daylight import DaylightResult, evaluate
 from .egress import EgressMap, compute as compute_egress
 from .grid import CellState, Grid, gridify
@@ -52,6 +54,8 @@ class Analysis:
     grade: str
     reasons: tuple[str, ...]
     quantities: dict[str, float | None]
+    exclusion: ExclusionResult
+    community: CommunityResult
 
     @property
     def units(self) -> tuple[PlacedUnit, ...]:
@@ -93,7 +97,12 @@ def analyze_floor(inputs: Inputs, floor: int, strategy: str) -> FloorAnalysis:
     return FloorAnalysis(floor, grid, corridor, em, pr, dl, commons)
 
 
-def _quantities(inputs: Inputs, floors: tuple[FloorAnalysis, ...], caps: Caps) -> dict:
+def _quantities(
+    inputs: Inputs,
+    floors: tuple[FloorAnalysis, ...],
+    caps: Caps,
+    community: CommunityResult,
+) -> dict:
     """물량만 낸다. 단가는 사용자 입력이다 (설계 [결정 필요] ④)."""
     units = tuple(u for f in floors for u in f.units)
     new_wall = sum(new_wall_length_mm(f.grid, f.units) for f in floors)
@@ -117,12 +126,20 @@ def _quantities(inputs: Inputs, floors: tuple[FloorAnalysis, ...], caps: Caps) -
         ),
     }
 
+    # 정화조 필요 용량: 세대 → 처리대상인원(고시 별표) → 유효용량(시행규칙 별표12).
+    # 관계가 선형이 아니라(1.5㎥ 기본 + 초과분 가산) 세대수에 비례하지 않는다.
+    septic_persons = None
     septic_required = None
-    if caps.by_axis("septic").available and units:
-        per_m3 = inputs.rules.septic_units_per_m3()
-        septic_required = round(len(units) / per_m3, 2) if per_m3 else None
+    if units:
+        septic_persons = round(
+            sum(inputs.units.by_id(u.type_id).persons_per_household for u in units), 1
+        )
+        septic_required = round(
+            inputs.rules.septic.volume_for_persons(septic_persons), 2
+        )
     septic = {
         "basis": "평면 상한 세대수 전량 실현 기준",
+        "persons": septic_persons,
         "required_m3": septic_required,
         "existing_m3": b.septic_capacity_m3,
         "shortfall_m3": (
@@ -140,6 +157,16 @@ def _quantities(inputs: Inputs, floors: tuple[FloorAnalysis, ...], caps: Caps) -
         "common_area_m2": round(
             sum(a.area_m2 for f in floors for a in f.commons), 2
         ),
+        "community": {
+            "required_m2": community.required_m2,
+            "provided_m2": community.provided_m2,
+            "households_before": community.households_before,
+            "removed_units": community.removed_count,
+            "floor": community.floor,
+            "offices": list(community.offices),
+            "satisfied": community.satisfied,
+            "basis": community.basis,
+        },
         "parking": parking,
         "septic": septic,
         "_note": "단가는 포함하지 않는다. 물량 × 사용자 입력 단가로 계산할 것.",
@@ -209,12 +236,23 @@ def analyze(inputs: Inputs, strategy: str) -> Analysis:
             f"알 수 없는 전략 '{strategy}'. "
             f"사용 가능: {', '.join(inputs.units.strategies)}"
         )
-    floors = tuple(
-        analyze_floor(inputs, f, strategy) for f in residential_floors(inputs)
-    )
+    targets = residential_floors(inputs)
+    floors = tuple(analyze_floor(inputs, f, strategy) for f in targets)
+
+    # 주민공동시설 의무면적을 먼저 뺀다. 빼기 전 세대수로 상한을 내면 과대평가된다.
+    floors, community = apply_community(inputs, floors)
+
     units = tuple(u for f in floors for u in f.units)
     caps = compute_caps(inputs.rules, inputs.units, inputs.building, units)
-    grade, reasons = make_verdict(caps, len(floors))
+
+    # 매입제외는 3축보다 앞선다. 매입 자체가 불가하면 세대수는 의미가 없다.
+    exclusion = check_exclusions(
+        inputs.exclusions,
+        inputs.building,
+        tuple(_plan_for(inputs, f) for f in targets),
+    )
+
+    grade, reasons = make_verdict(caps, len(floors), exclusion)
     return Analysis(
         inputs=inputs,
         strategy=strategy,
@@ -222,5 +260,7 @@ def analyze(inputs: Inputs, strategy: str) -> Analysis:
         caps=caps,
         grade=grade,
         reasons=reasons,
-        quantities=_quantities(inputs, floors, caps),
+        quantities=_quantities(inputs, floors, caps, community),
+        exclusion=exclusion,
+        community=community,
     )

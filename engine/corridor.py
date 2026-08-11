@@ -28,10 +28,14 @@ class CorridorResult:
     need_cells: int
     coverage_low: float
     coverage_high: float
+    width_cells: int = 0
 
     @property
     def is_double(self) -> bool:
         return self.type == "double"
+
+    def width_mm(self, grid_mm: int) -> int:
+        return self.width_cells * grid_mm
 
 
 def _core_bbox_cells(fp: FloorPlan, grid: Grid) -> tuple[int, int, int, int]:
@@ -121,16 +125,23 @@ def _clamp_band(center: int, width: int, extent: int) -> Band:
 
 
 def generate(fp: FloorPlan, grid: Grid, rules: Rules, units: Units) -> CorridorResult:
-    """복도를 생성해 grid 에 CORRIDOR 를 칠하고 판정 결과를 돌려준다."""
+    """복도를 생성해 grid 에 CORRIDOR 를 칠하고 판정 결과를 돌려준다.
+
+    **2패스인 이유.** 폭이 유형을 정하고 유형이 폭을 정하는 순환이 있다. 중복도는
+    1800mm, 편복도는 1200mm 인데(가이드라인 항목 38), 어느 쪽인지는 복도를 놓아
+    양옆을 재봐야 안다. 그래서 넓은 폭으로 먼저 재고, 편복도로 판정되면 좁은 폭으로
+    다시 생성한다. 폭이 좁아지면 양옆 사용 가능 깊이가 늘어날 뿐이므로 중복도 판정이
+    새로 생기지 않는다 — 2패스에서 끝난다.
+
+    종전에는 1800 단일값을 편복도에도 써서 세대수를 과소 산출했다.
+    """
     axis = _pick_axis(fp, grid)
-    width = rules.corridor_width_cells
     extent = _depth_extent(grid, axis)
     need = units.min_depth_mm // rules.grid_mm
     coverage_min = rules.corridor_side_usable_coverage
 
     r0, c0, r1, c1 = _core_bbox_cells(fp, grid)
     center = (r0 + r1) // 2 if axis == "h" else (c0 + c1) // 2
-    band = _clamp_band(center, width, extent)
 
     def measure(b: Band) -> tuple[float, int, float, int]:
         lanes = _active_lanes(grid, axis, b)
@@ -138,16 +149,26 @@ def generate(fp: FloorPlan, grid: Grid, rules: Rules, units: Units) -> CorridorR
         cov_hi, d_hi = _coverage(_side_depths(grid, axis, b, "high"), lanes, need)
         return cov_lo, d_lo, cov_hi, d_hi
 
-    cov_lo, d_lo, cov_hi, d_hi = measure(band)
-    ok_lo = cov_lo >= coverage_min
-    ok_hi = cov_hi >= coverage_min
-
-    # 한쪽만 쓸 수 있으면 편복도. 복도를 못 쓰는 쪽 외벽에 붙여 사용 가능 깊이를 넓힌다.
-    if ok_lo != ok_hi:
-        band = (0, width - 1) if ok_hi else (extent - width, extent - 1)
+    def lay(width: int):
+        band = _clamp_band(center, width, extent)
         cov_lo, d_lo, cov_hi, d_hi = measure(band)
         ok_lo = cov_lo >= coverage_min
         ok_hi = cov_hi >= coverage_min
+        # 한쪽만 쓸 수 있으면 복도를 못 쓰는 쪽 외벽에 붙여 사용 깊이를 넓힌다.
+        if ok_lo != ok_hi:
+            band = (0, width - 1) if ok_hi else (extent - width, extent - 1)
+            cov_lo, d_lo, cov_hi, d_hi = measure(band)
+            ok_lo = cov_lo >= coverage_min
+            ok_hi = cov_hi >= coverage_min
+        return band, ok_lo, ok_hi, cov_lo, d_lo, cov_hi, d_hi
+
+    width = rules.corridor_width_cells
+    band, ok_lo, ok_hi, cov_lo, d_lo, cov_hi, d_hi = lay(width)
+
+    if not (ok_lo and ok_hi) and rules.corridor_single_width_cells < width:
+        # 중복도가 아니다 → 편복도 폭으로 다시 놓는다.
+        width = rules.corridor_single_width_cells
+        band, ok_lo, ok_hi, cov_lo, d_lo, cov_hi, d_hi = lay(width)
 
     if ok_lo and ok_hi:
         ctype = "double"
@@ -171,4 +192,5 @@ def generate(fp: FloorPlan, grid: Grid, rules: Rules, units: Units) -> CorridorR
         need_cells=need,
         coverage_low=cov_lo,
         coverage_high=cov_hi,
+        width_cells=width,
     )

@@ -49,7 +49,17 @@ class TestInvariants(unittest.TestCase):
     def test_유닛_치수가_규격과_같다(self):
         for u in self.res.units:
             _, _, w, h = u.rect_mm
-            self.assertEqual(w * h / 1_000_000, 18.0 if u.type_id == "youth" else 28.8)
+            self.assertEqual(w * h / 1_000_000, 21.6 if u.type_id == "youth" else 36.0)
+
+    def test_유닛_면적이_LH_매입_하한을_넘는다(self):
+        """청년Ⅱ 19㎡ 이상 / 신혼·신생아 36㎡ 이상 (매입 공고 3장 공급유형표).
+
+        하한 미달이면 매입 대상이 아니라 세대수를 아무리 뽑아도 무효다.
+        """
+        minimum = {"youth": 19.0, "newlywed": 36.0}
+        for u in self.res.units:
+            _, _, w, h = u.rect_mm
+            self.assertGreaterEqual(w * h / 1_000_000, minimum[u.type_id])
 
 
 class TestGoldenG1(unittest.TestCase):
@@ -59,11 +69,11 @@ class TestGoldenG1(unittest.TestCase):
 
 
 class TestGoldenG2(unittest.TestCase):
-    def test_공급우선형_20세대(self):
-        # 50열 / 청년형 5열 = 면당 10세대, 중복도이므로 ×2
+    def test_공급우선형_16세대(self):
+        # 50열 / 청년형 6열 = 면당 8세대, 중복도이므로 ×2
         _, _, res = run("tests/golden/G2", "supply")
-        self.assertEqual(res.count, 20)
-        self.assertEqual(res.count_by_type(), {"youth": 20})
+        self.assertEqual(res.count, 16)
+        self.assertEqual(res.count_by_type(), {"youth": 16})
 
     def test_균형형은_두_유형이_섞인다(self):
         _, _, res = run("tests/golden/G2", "balanced")

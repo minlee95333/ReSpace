@@ -65,8 +65,8 @@ class TestReasons(unittest.TestCase):
     def test_G3_사유_구성(self):
         _, _, _, areas = run("tests/golden/G3")
         s = summarize(areas)
-        self.assertEqual(s["no_window"], 108.0)      # 18㎡ × 6
-        self.assertEqual(s["daylight_short"], 18.0)  # 18㎡ × 1
+        self.assertEqual(s["no_window"], 86.4)       # 21.6㎡ × 4
+        self.assertEqual(s["daylight_short"], 21.6)  # 21.6㎡ × 1
         self.assertIn("geometry", s)
 
     def test_피난_초과_구역이_따로_잡힌다(self):

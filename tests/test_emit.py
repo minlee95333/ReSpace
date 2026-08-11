@@ -29,7 +29,13 @@ class TestResultJson(unittest.TestCase):
         h = self.r["meta"]["input_hash"]
         self.assertEqual(
             set(h),
-            {"rules.json", "units.json", "building.json", "floor_plan_01.json"},
+            {
+                "rules.json",
+                "units.json",
+                "exclusions.json",
+                "building.json",
+                "floor_plan_01.json",
+            },
         )
         for v in h.values():
             self.assertTrue(v.startswith("sha256:"))
@@ -45,12 +51,16 @@ class TestResultJson(unittest.TestCase):
     def test_병목이_명시된다(self):
         self.assertEqual(self.r["caps"]["bottleneck"], "parking")
         self.assertEqual(self.r["caps"]["bottleneck_label"], "주차")
-        self.assertFalse(self.r["caps"]["complete"])
+        self.assertTrue(self.r["caps"]["complete"])
 
     def test_미확보_축은_null_과_사유를_함께_낸다(self):
-        septic = next(a for a in self.r["caps"]["axes"] if a["axis"] == "septic")
-        self.assertIsNone(septic["value"])
-        self.assertTrue(septic["blocked_reason"])
+        r = build_result(run("tests/golden/G6"), None)
+        for axis in ("parking", "septic"):
+            with self.subTest(axis=axis):
+                a = next(x for x in r["caps"]["axes"] if x["axis"] == axis)
+                self.assertIsNone(a["value"])
+                self.assertTrue(a["blocked_reason"])
+        self.assertFalse(r["caps"]["complete"])
 
     def test_센티널이_새지_않는다(self):
         # 샤프트가 없는 건물에서 내부 정렬용 큰 수가 결과로 나가면 안 된다.
@@ -97,7 +107,8 @@ class TestSvg(unittest.TestCase):
         ]
         units = [r for r in rects if r[0] == FILL["youth"]]
         border = [r for r in rects if r[0] == "none"][0]
-        self.assertEqual(len(units), 20)
+        # 1층은 최하 주거층이라 주민공동시설 의무면적으로 4세대가 빠진다 (16 → 12).
+        self.assertEqual(len(units), 12)
 
         _, bx, by, bw, bh = border
         for _, x, y, w, h in units:
@@ -120,8 +131,8 @@ class TestSvg(unittest.TestCase):
             for e in root.iter()
             if e.tag.endswith("rect") and e.get("fill") == FILL["youth"]
         }
-        # 3000×6000mm × 0.02 px/mm
-        self.assertEqual(sizes, {(60.0, 120.0)})
+        # 3600×6000mm × 0.02 px/mm
+        self.assertEqual(sizes, {(72.0, 120.0)})
 
 
 class TestWrite(unittest.TestCase):

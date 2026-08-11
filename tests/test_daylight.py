@@ -49,22 +49,22 @@ class TestG3(unittest.TestCase):
         self.inp, self.pr, self.dl = run("tests/golden/G3")
 
     def test_탈락_건수(self):
-        self.assertEqual(self.pr.count, 24)
-        self.assertEqual(self.dl.kept, 17)
-        self.assertEqual(len(self.dl.rejected), 7)
+        self.assertEqual(self.pr.count, 20)
+        self.assertEqual(self.dl.kept, 15)
+        self.assertEqual(len(self.dl.rejected), 5)
 
     def test_두_사유가_모두_나온다(self):
         reasons = {}
         for r in self.dl.rejected:
             reasons[r.reason] = reasons.get(r.reason, 0) + 1
-        self.assertEqual(reasons, {"no_window": 6, "daylight_short": 1})
+        self.assertEqual(reasons, {"no_window": 4, "daylight_short": 1})
 
     def test_창면적_부족_유닛의_수치(self):
         short = [r for r in self.dl.rejected if r.reason == "daylight_short"]
         self.assertEqual(len(short), 1)
-        # 창 600mm × 높이 1500mm = 0.9㎡ < 필요 1.8㎡ (18㎡의 1/10)
+        # 창 600mm × 높이 1500mm = 0.9㎡ < 필요 2.16㎡ (21.6㎡의 1/10)
         self.assertIn("0.90", short[0].detail)
-        self.assertIn("1.80", short[0].detail)
+        self.assertIn("2.16", short[0].detail)
 
     def test_통과_유닛은_모두_기준_이상(self):
         for u in self.dl.units:
@@ -78,15 +78,16 @@ class TestRatio(unittest.TestCase):
         inp, _, dl = run("tests/golden/G2")
         corner = [u for u in dl.units if u.rect_mm[:2] == (0, 0)]
         self.assertEqual(len(corner), 1)
-        # 아래변 3000 + 좌변 6000
-        self.assertEqual(corner[0].window_len_mm, 9000)
-        self.assertEqual(corner[0].daylight_ratio, 0.75)
+        # 아래변 3600 + 좌변 6000
+        self.assertEqual(corner[0].window_len_mm, 9600)
+        self.assertEqual(corner[0].daylight_ratio, 0.6667)
 
     def test_중간_유닛은_한_면만(self):
         inp, _, dl = run("tests/golden/G2")
-        mid = [u for u in dl.units if u.rect_mm[0] == 15000 and u.rect_mm[1] == 0]
+        # 청년형 폭 3600 이므로 레인은 0, 3600, ... 14400 에 선다
+        mid = [u for u in dl.units if u.rect_mm[0] == 14400 and u.rect_mm[1] == 0]
         self.assertTrue(mid)
-        self.assertEqual(mid[0].window_len_mm, 3000)
+        self.assertEqual(mid[0].window_len_mm, 3600)
         self.assertEqual(mid[0].daylight_ratio, 0.25)
 
 

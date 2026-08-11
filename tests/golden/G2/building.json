@@ -11,5 +11,24 @@
   "gfa_m2": 2250.0,
   "parking_existing": 20,
   "septic_capacity_m3": 30.0,
+  "septic_mode_raw": "단독정화조",
+  "violation": false,
+  "_answers_note": "매입제외 조건 중 사실관계 항목은 도면에 없다. G2 는 '전부 해당 없음'을 답한 깨끗한 사례로 두어 '통과' 등급이 도달 가능함을 검증한다. 다른 골든케이스는 답을 비워 '조건부 통과' 경로를 검증한다.",
+  "exclusion_answers": {
+    "use_change_impossible": false,
+    "owner_unified": false,
+    "ownership_complex": false,
+    "de_facto_residential": false,
+    "development_zone": false,
+    "min_housing_standard": false,
+    "meter_and_utility": false,
+    "hazard_500m": false,
+    "hazard_50m": false,
+    "hazard_25m": false,
+    "legal_dispute": false,
+    "land_occupied": false,
+    "access_road": false,
+    "neighborhood_facility_only": false
+  },
   "source_note": "인공 테스트 평면"
 }

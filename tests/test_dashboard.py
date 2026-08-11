@@ -1,3 +1,4 @@
+import dataclasses as dc
 import json
 import re
 import shutil
@@ -15,7 +16,10 @@ DATA = "data"
 SMOKE = Path(__file__).with_name("smoke_dashboard.mjs")
 
 
-def payload_for(dirs=("tests/golden/G2", "data/buildings/esquisse-gasan")):
+#: G2=인공평면(3축 완주) · G6=입력 미확보 · 에스키스=placeholder 도면.
+#: 셋이 각각 다른 표시 경로를 태운다.
+def payload_for(dirs=("tests/golden/G2", "tests/golden/G6",
+                      "data/buildings/esquisse-gasan")):
     buildings, rules_version, grid_mm = [], None, None
     for d in dirs:
         inp = load_inputs(d, DATA)
@@ -28,41 +32,63 @@ def payload_for(dirs=("tests/golden/G2", "data/buildings/esquisse-gasan")):
 
 class TestRecommend(unittest.TestCase):
     def test_공급_최다안을_고른다(self):
-        inp = load_inputs("data/buildings/esquisse-gasan", DATA)
+        inp = load_inputs("tests/golden/G6", DATA)
         analyses = {s: analyze(inp, s) for s in inp.units.strategies}
         # 16 / 11 / 4 — 동점 없음
         best, reasons = recommend(analyses)
         self.assertEqual(best, "supply")
         self.assertIn("최다", reasons[0])
 
-    def test_세대수와_재사용률이_같으면_덜_뜯는_안(self):
-        # G2 는 샤프트가 없어 재사용률이 전부 0%. 주차가 40세대로 묶으므로
-        # 공급우선형·균형형이 동수가 되고, 신설 벽체가 갈림길이 된다.
+    def test_유형_구성이_주차_상한을_바꾼다(self):
+        """신혼형 36㎡ 는 주차계수 0.6, 청년형 21.6㎡ 는 0.5 다.
+
+        전용 30㎡ 를 경계로 계수가 갈리므로(주차장법 시행령 제6조 소형주택 특례)
+        같은 건물이어도 유형 구성에 따라 주차 상한이 달라진다. 종전에는 두 유형이
+        모두 30㎡ 미만이라 이 차이가 드러나지 않았다.
+        """
         inp = load_inputs("tests/golden/G2", DATA)
         analyses = {s: analyze(inp, s) for s in inp.units.strategies}
-        self.assertEqual(analyses["supply"].caps.supply, 40)
-        self.assertEqual(analyses["balanced"].caps.supply, 40)
-        self.assertEqual(analyses["supply"].quantities["shaft_reuse_ratio"], 0.0)
-        self.assertEqual(analyses["balanced"].quantities["shaft_reuse_ratio"], 0.0)
+        self.assertEqual(analyses["supply"].caps.by_axis("parking").value, 40)
+        self.assertEqual(analyses["balanced"].caps.by_axis("parking").value, 36)
         best, reasons = recommend(analyses)
-        self.assertEqual(best, "balanced")
+        self.assertEqual(best, "supply")
+        self.assertIn("최다", reasons[0])
+
+    def _tie(self, building_dir, supply_value):
+        """공급 세대수를 같게 맞춘 대안 집합.
+
+        실제 골든케이스는 유형별 주차계수가 갈려 동수가 나오지 않는다. 동수일 때만
+        도는 ②③ 기준을 덮으려면 동점을 명시적으로 만들어야 한다.
+        """
+        inp = load_inputs(building_dir, DATA)
+        out = {}
+        for s in inp.units.strategies:
+            a = analyze(inp, s)
+            out[s] = dc.replace(a, caps=dc.replace(a.caps, supply=supply_value))
+        return out
+
+    def test_세대수와_재사용률이_같으면_덜_뜯는_안(self):
+        # G2 는 샤프트가 없어 재사용률이 전부 0%. 신설 벽체가 갈림길이 된다.
+        analyses = self._tie("tests/golden/G2", 36)
+        for s in ("supply", "balanced"):
+            self.assertEqual(analyses[s].quantities["shaft_reuse_ratio"], 0.0)
+        best, reasons = recommend(analyses)
+        self.assertEqual(best, "minimal")  # 신설 벽체 0m 로 가장 덜 뜯는다
         joined = " ".join(reasons)
         self.assertIn("신설 벽체", joined)
         # 0% vs 0% 같은 무의미한 근거가 나오면 안 된다
         self.assertNotIn("0% vs 0%", joined)
 
     def test_동수면_설비_재사용률이_높은_안(self):
-        inp = load_inputs("tests/golden/G3", DATA)
-        analyses = {s: analyze(inp, s) for s in inp.units.strategies}
-        # 공급우선형과 균형형 모두 주차 상한 60세대에 걸린다
-        self.assertEqual(analyses["supply"].caps.supply, 60)
-        self.assertEqual(analyses["balanced"].caps.supply, 60)
+        analyses = self._tie("tests/golden/G3", 54)
         self.assertGreater(
             analyses["balanced"].quantities["shaft_reuse_ratio"],
             analyses["supply"].quantities["shaft_reuse_ratio"],
         )
         best, reasons = recommend(analyses)
-        self.assertEqual(best, "balanced")
+        # 저개입형이 재사용률 100% 로 가장 높다
+        self.assertEqual(best, "minimal")
+        self.assertIn("설비 재사용률", " ".join(reasons))
         self.assertIn("재사용률", " ".join(reasons))
 
 
@@ -71,7 +97,7 @@ class TestPayload(unittest.TestCase):
         self.p = payload_for()
 
     def test_건물마다_3안이_들어간다(self):
-        self.assertEqual(len(self.p["buildings"]), 2)
+        self.assertEqual(len(self.p["buildings"]), 3)
         for b in self.p["buildings"]:
             self.assertEqual(set(b["strategies"]), {"supply", "balanced", "minimal"})
             self.assertIn(b["recommended"], b["strategies"])
