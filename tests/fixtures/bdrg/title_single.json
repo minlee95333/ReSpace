@@ -1,0 +1,35 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00"
+    },
+    "body": {
+      "items": {
+        "item": {
+          "_fixture": "합성 픽스처 — 실제 건물이 아니다. 매핑 로직 검증 전용.",
+          "platPlc": "○○시 ○○구 ○○동 1-1",
+          "bldNm": "합성 시험동",
+          "mainPurpsCdNm": "업무시설",
+          "etcPurps": "사무소",
+          "strctCdNm": "철근콘크리트구조",
+          "grndFlrCnt": 5,
+          "ugrndFlrCnt": 1,
+          "heit": "18",
+          "totArea": 2700,
+          "rideUseElvtCnt": 1,
+          "emgenUseElvtCnt": "0",
+          "indrAutoUtcnt": 12,
+          "oudrAutoUtcnt": 6,
+          "indrMechUtcnt": 2,
+          "oudrMechUtcnt": 0,
+          "useAprDay": "20100315",
+          "pmsDay": "20080901",
+          "rserthqkDsgnApplyYn": "적용",
+          "rserthqkAblty": "0.1g",
+          "dongNm": "주건축물제1동",
+          "mainAtchGbCdNm": "주건축물"
+        }
+      }
+    }
+  }
+}

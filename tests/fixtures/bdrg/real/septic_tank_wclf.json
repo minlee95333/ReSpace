@@ -1,0 +1,49 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE"
+    },
+    "body": {
+      "items": {
+        "item": [
+          {
+            "rnum": 1,
+            "platPlc": "서울특별시 강남구 역삼동 604번지",
+            "sigunguCd": "11680",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0604",
+            "ji": "0000",
+            "mgmBldrgstPk": 102415135,
+            "regstrGbCd": "2",
+            "regstrGbCdNm": "집합",
+            "regstrKindCd": "3",
+            "regstrKindCdNm": "표제부",
+            "newPlatPlc": "서울특별시 강남구 논현로105길 52 (역삼동)",
+            "bldNm": "리치타워아파트",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "naRoadCd": "116804166109",
+            "naBjdongCd": "10101",
+            "naUgrndCd": "0",
+            "naMainBun": "52",
+            "naSubBun": "0",
+            "modeCd": "201",
+            "modeCdNm": "부패탱크방법",
+            "etcMode": "콘크리트각형오수정화조",
+            "unitGbCd": "2",
+            "unitGbCdNm": "루베",
+            "capaPsper": 120,
+            "capaLube": 0,
+            "crtnDay": "20220813"
+          }
+        ]
+      },
+      "numOfRows": "100",
+      "pageNo": "1",
+      "totalCount": "1"
+    }
+  }
+}

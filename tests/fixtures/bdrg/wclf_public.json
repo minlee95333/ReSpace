@@ -1,0 +1,25 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE."
+    },
+    "body": {
+      "items": {
+        "item": [
+          {
+            "modeCd": "300",
+            "modeCdNm": "하수종말처리장연결",
+            "etcMode": "",
+            "capaPsper": 0,
+            "capaLube": 0,
+            "unitGbCdNm": " "
+          }
+        ]
+      },
+      "numOfRows": 500,
+      "pageNo": 1,
+      "totalCount": 1
+    }
+  }
+}

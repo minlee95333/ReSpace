@@ -1,0 +1,81 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE"
+    },
+    "body": {
+      "items": {
+        "item": [
+          {
+            "rnum": 1,
+            "platPlc": "서울특별시 강남구 역삼동 652번지",
+            "sigunguCd": "11680",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0652",
+            "ji": "0000",
+            "mgmBldrgstPk": 1000000000000003490504,
+            "regstrGbCd": "1",
+            "regstrGbCdNm": "일반",
+            "regstrKindCd": "2",
+            "regstrKindCdNm": "일반건축물",
+            "newPlatPlc": "서울특별시 강남구 봉은사로 220 (역삼동)",
+            "bldNm": "PSP Tower2",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "naRoadCd": "116803122004",
+            "naBjdongCd": "10101",
+            "naUgrndCd": "0",
+            "naMainBun": "220",
+            "naSubBun": "0",
+            "modeCd": "201",
+            "modeCdNm": "부패탱크방법",
+            "etcMode": " ",
+            "unitGbCd": " ",
+            "unitGbCdNm": " ",
+            "capaPsper": 400,
+            "capaLube": 0,
+            "crtnDay": "20240404"
+          },
+          {
+            "rnum": 2,
+            "platPlc": "서울특별시 강남구 역삼동 652번지",
+            "sigunguCd": "11680",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0652",
+            "ji": "0000",
+            "mgmBldrgstPk": 1000000000000003490504,
+            "regstrGbCd": "1",
+            "regstrGbCdNm": "일반",
+            "regstrKindCd": "2",
+            "regstrKindCdNm": "일반건축물",
+            "newPlatPlc": "서울특별시 강남구 봉은사로 220 (역삼동)",
+            "bldNm": "PSP Tower2",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "naRoadCd": "116803122004",
+            "naBjdongCd": "10101",
+            "naUgrndCd": "0",
+            "naMainBun": "220",
+            "naSubBun": "0",
+            "modeCd": "300",
+            "modeCdNm": "하수종말처리장연결",
+            "etcMode": " ",
+            "unitGbCd": " ",
+            "unitGbCdNm": " ",
+            "capaPsper": 0,
+            "capaLube": 0,
+            "crtnDay": "20241119"
+          }
+        ]
+      },
+      "numOfRows": "100",
+      "pageNo": "1",
+      "totalCount": "2"
+    }
+  }
+}

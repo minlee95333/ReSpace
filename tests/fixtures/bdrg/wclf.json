@@ -1,0 +1,25 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE."
+    },
+    "body": {
+      "items": {
+        "item": [
+          {
+            "modeCd": "201",
+            "modeCdNm": "부패탱크방법",
+            "etcMode": "부패탱크방법",
+            "capaPsper": 290,
+            "capaLube": 0,
+            "unitGbCdNm": " "
+          }
+        ]
+      },
+      "numOfRows": 500,
+      "pageNo": 1,
+      "totalCount": 1
+    }
+  }
+}
