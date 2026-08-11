@@ -51,3 +51,12 @@ build/
 
 # Notion 캐시 (TTL 5분, 재생성 가능)
 .claude/cache/
+
+# LH 원자료 — 대용량 아카이브
+# guide.zip 은 139MB (GitHub 100MB 제한 초과). 설계·시공 가이드라인과
+# LH 표준상세도(144MB PDF)가 들어 있으며 LH 홈페이지에서 다시 받을 수 있다.
+ReSpace-자료/guide.zip
+ReSpace-자료/.claude/
+
+# 대화 중 내려받은 외부 도면 (제3자 저작물 — 커밋하지 않는다)
+real_dwg/
