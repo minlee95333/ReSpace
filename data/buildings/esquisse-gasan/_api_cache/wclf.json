@@ -1,0 +1,49 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE"
+    },
+    "body": {
+      "items": {
+        "item": [
+          {
+            "rnum": 1,
+            "platPlc": "서울특별시 금천구 가산동 139-8번지",
+            "sigunguCd": "11545",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0139",
+            "ji": "0008",
+            "mgmBldrgstPk": 10191100226979,
+            "regstrGbCd": "2",
+            "regstrGbCdNm": "집합",
+            "regstrKindCd": "3",
+            "regstrKindCdNm": "표제부",
+            "newPlatPlc": "서울특별시 금천구 벚꽃로56길 190 (가산동)",
+            "bldNm": "에스키스 가산",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "naRoadCd": "115454151236",
+            "naBjdongCd": "10101",
+            "naUgrndCd": "0",
+            "naMainBun": "190",
+            "naSubBun": "0",
+            "modeCd": "299",
+            "modeCdNm": "기타단독정화조",
+            "etcMode": "기타단독정화조",
+            "unitGbCd": " ",
+            "unitGbCdNm": " ",
+            "capaPsper": 550,
+            "capaLube": 0,
+            "crtnDay": "20220813"
+          }
+        ]
+      },
+      "numOfRows": "100",
+      "pageNo": "1",
+      "totalCount": "1"
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "response": {
+    "header": {
+      "resultCode": "00",
+      "resultMsg": "NORMAL SERVICE"
+    },
+    "body": {
+      "items": {
+        "item": [
+          {
+            "rnum": 1,
+            "platPlc": "서울특별시 금천구 가산동 139-8번지",
+            "sigunguCd": "11545",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0139",
+            "ji": "0008",
+            "mgmBldrgstPk": 10191100226979,
+            "newPlatPlc": "서울특별시 금천구 벚꽃로56길 190 (가산동)",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "jijiguGbCd": "1",
+            "jijiguGbCdNm": "용도지역코드",
+            "jijiguCd": "UQA200",
+            "jijiguCdNm": "상업지역",
+            "reprYn": "1",
+            "etcJijigu": "상업지역",
+            "crtnDay": "20220813"
+          },
+          {
+            "rnum": 2,
+            "platPlc": "서울특별시 금천구 가산동 139-8번지",
+            "sigunguCd": "11545",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0139",
+            "ji": "0008",
+            "mgmBldrgstPk": 10191100226979,
+            "newPlatPlc": "서울특별시 금천구 벚꽃로56길 190 (가산동)",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "jijiguGbCd": "2",
+            "jijiguGbCdNm": "용도지구코드",
+            "jijiguCd": "UQG130",
+            "jijiguCdNm": "일반미관지구",
+            "reprYn": "1",
+            "etcJijigu": "일반미관지구",
+            "crtnDay": "20220813"
+          },
+          {
+            "rnum": 3,
+            "platPlc": "서울특별시 금천구 가산동 139-8번지",
+            "sigunguCd": "11545",
+            "bjdongCd": "10100",
+            "platGbCd": "0",
+            "bun": "0139",
+            "ji": "0008",
+            "mgmBldrgstPk": 10191100226979,
+            "newPlatPlc": "서울특별시 금천구 벚꽃로56길 190 (가산동)",
+            "splotNm": " ",
+            "block": " ",
+            "lot": " ",
+            "jijiguGbCd": "3",
+            "jijiguGbCdNm": "용도구역코드",
+            "jijiguCd": "UQQ310",
+            "jijiguCdNm": "제1종지구단위계획구역",
+            "reprYn": "1",
+            "etcJijigu": "제1종지구단위계획구역",
+            "crtnDay": "20220813"
+          }
+        ]
+      },
+      "numOfRows": "100",
+      "pageNo": "1",
+      "totalCount": "3"
+    }
+  }
+}
