@@ -6,11 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/pre-tool-use-safety.sh Bash"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/pre-tool-use-safety.sh\" Bash"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/mvp-safety-guard.sh Bash"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/mvp-safety-guard.sh\" Bash"
           }
         ]
       },
@@ -19,11 +19,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/pre-tool-use-safety.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/pre-tool-use-safety.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/mvp-safety-guard.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/mvp-safety-guard.sh\" Write"
           }
         ]
       },
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/pre-tool-use-safety.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/pre-tool-use-safety.sh\" Edit"
           }
         ]
       }
@@ -43,19 +43,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/auto-doc-sync.sh Bash"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/auto-doc-sync.sh\" Bash"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/post-tool-use-tracker.sh Bash"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/post-tool-use-tracker.sh\" Bash"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/notion-sync.sh Bash"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/notion-sync.sh\" Bash"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/lifecycle-tracker.sh Bash"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/lifecycle-tracker.sh\" Bash"
           }
         ]
       },
@@ -64,31 +64,31 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/auto-doc-sync.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/auto-doc-sync.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/phase-progress.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/phase-progress.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/post-tool-use-tracker.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/post-tool-use-tracker.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/state-transition.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/state-transition.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/craft-progress.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/craft-progress.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/notion-sync.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/notion-sync.sh\" Write"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/lifecycle-tracker.sh Write"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/lifecycle-tracker.sh\" Write"
           }
         ]
       },
@@ -97,31 +97,31 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/auto-doc-sync.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/auto-doc-sync.sh\" Edit"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/phase-progress.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/phase-progress.sh\" Edit"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/post-tool-use-tracker.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/post-tool-use-tracker.sh\" Edit"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/state-transition.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/state-transition.sh\" Edit"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/craft-progress.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/craft-progress.sh\" Edit"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/notion-sync.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/notion-sync.sh\" Edit"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/lifecycle-tracker.sh Edit"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/lifecycle-tracker.sh\" Edit"
           }
         ]
       }
@@ -132,7 +132,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/notification-handler.sh"
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude/hooks/notification-handler.sh\""
           }
         ]
       }
