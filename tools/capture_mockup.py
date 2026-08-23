@@ -4,15 +4,19 @@
 **왜 스크립트인가.** 손으로 찍으면 수치가 바뀔 때 다시 찍는 것을 잊는다.
 실제로 그림 7·8·9 가 옛 화면인 채로 한동안 남아 있었다.
 
-**무채색으로 바꾸는 방법.** 히트맵 색은 tokens.css 의 `--scale-*` 다섯 정지점을
-`theme.js` 의 heat() 가 보간해 쓴다. `<style>` 을 끼워 넣는 방법은 실패했다 —
-heat() 가 첫 호출에 값을 캐시하는데 그 시점을 맞추기 어렵다. 그래서
-**tokens.css 응답 자체를 가로채 바꾼다.** 브라우저가 원본을 본 적이 없으므로
-타이밍 문제가 없고, 리포의 파일은 건드리지 않는다.
+**색.** 기본은 원본 컬러다(`GRAYSCALE = False`). 검출확률 히트맵은 색이
+정보를 지므로 이 그림만은 예외로 둔다.
 
-램프는 어두울수록 못 보는 곳이다. 원본은 붉은색↔푸른색 발산 램프라 그대로
-회색조로 낮추면 양끝 명도가 비슷해져 구별이 사라진다. 여기서는 명도를
-단조로 깐다.
+무채색이 필요하면 `GRAYSCALE = True` 로 바꾼다. 그때는 tokens.css 의
+`--scale-*` 다섯 정지점을 **응답째 가로채** 회색 램프로 바꾼다 — `<style>` 을
+끼워 넣는 방법은 heat() 가 첫 호출에 값을 캐시해 타이밍이 안 맞았다. 원본이
+붉은색↔푸른색 발산이라 그대로 회색조로 낮추면 양끝 명도가 비슷해져 구별이
+사라지므로, 명도를 단조로 다시 깐다.
+
+**시점.** `PITCH` 가 클수록 위에서 내려다본다(2D 가 90°). 목업 기본값 25° 는
+거의 옆에서 보는 각이라 지면 그림으로는 층 구조가 안 읽힌다. 여기서는 올려
+잡는다. PRESETS 를 페이지 위에서 바꾼 뒤 3D 버튼을 누르면 적용된다 —
+setMode 가 그때 PRESETS 를 복사하기 때문이다.
 
     python tools/capture_mockup.py
     python tools/make_figures_extra.py     # → fig_3d.png
@@ -28,7 +32,10 @@ MOCKUP = ROOT / "mockup"
 OUT = ROOT / "outputs" / "figures" / "_mockup_3d.png"
 PORT = 8793
 
-# 어두울수록 못 보는 곳. 명도를 단조로 깐다.
+GRAYSCALE = False       # 이 그림만 컬러를 허용한다
+PITCH = 58              # 클수록 위에서 본다. 목업 기본은 25
+
+# 어두울수록 못 보는 곳. 명도를 단조로 깐다. GRAYSCALE 일 때만 쓴다.
 GRAY_STOPS = {
     "--scale-0": "#2E2E2E",     # P 0.00  미달극
     "--scale-25": "#5A5A5A",
@@ -74,14 +81,15 @@ def trim(path: Path, pad: int = 18):
     실제 내용이 절반 크기로 들어간다.
     """
     from PIL import Image
-    im = Image.open(path).convert("L")
+    im = Image.open(path)
+    im = im.convert("L") if GRAYSCALE else im.convert("RGB")
     # 모서리 색과 비교하는 방법은 못 쓴다 ― 캔버스가 둥근 카드 위에 있어
     # 카드 전체가 '내용'으로 잡힌다. 명도로 자른다.
     # 캔버스 가장자리에 둥근 카드 테두리가 옅게 그려져 있어 그대로 재면
     # 언제나 전체가 나온다. 바깥 2% 를 떼고 잰 뒤 좌표를 되돌린다.
     ins = int(min(im.size) * 0.02)
     inner = im.crop((ins, ins, im.width - ins, im.height - ins))
-    box = inner.point(lambda v: 255 if v < 238 else 0).getbbox()
+    box = inner.convert("L").point(lambda v: 255 if v < 238 else 0).getbbox()
     if box:
         box = (box[0] + ins, box[1] + ins, box[2] + ins, box[3] + ins)
     im = im.convert("RGB")
@@ -116,9 +124,13 @@ def main():
                 r = route.fetch()
                 route.fulfill(response=r, body=graytokens(r.text()))
 
-            page.route("**/tokens.css", route_tokens)
+            if GRAYSCALE:
+                page.route("**/tokens.css", route_tokens)
             page.goto(f"http://127.0.0.1:{PORT}/index.html")
             page.wait_for_selector("canvas", timeout=30000)
+            # 3D 버튼을 누르기 전에 기준각을 바꾼다. setMode 가 이때 복사한다.
+            page.evaluate("(p) => { window.CoverageViewer.PRESETS['3d'].pitch = p; }",
+                          PITCH)
             page.click('button[data-m="3d"]')
             page.wait_for_timeout(1500)     # 캔버스가 한 프레임 더 돌 시간
             page.locator("canvas").first.screenshot(path=str(OUT))
