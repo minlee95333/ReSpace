@@ -280,4 +280,43 @@ if SRC.exists():
     fig.savefig(OUT / "fig_report.png", dpi=DPI)
     plt.close(fig)
 
+# ══ F. 3D 검출확률 히트맵 ══════════════════════════════════════════════════
+# tools/capture_mockup.py 가 무채색으로 찍어 여백까지 잘라 둔 것을 액자에만 넣는다.
+M3D = OUT / "_mockup_3d.png"
+if M3D.exists():
+    src = Image.open(M3D).convert("RGB")
+    fig, ax = plt.subplots(figsize=(11.4, 11.4 * src.height / src.width))
+    ax.imshow(np.asarray(src))
+    ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_color(RULE); s.set_linewidth(0.9)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(OUT / "fig_3d.png", dpi=DPI)
+    plt.close(fig)
+
+# ══ G. 시간대별 진단 ― 보고서 §7 만 잘라 쓴다 ══════════════════════════════
+# 목업에는 시간대 화면이 없다. 그 내용은 보고서 7절에 있으므로 거기서 오린다.
+# 위치는 캡처 전체 높이 대비 비율로 잡는다 ― 표 길이가 바뀌어도 따라간다.
+RSRC = OUT / "_report_full.png"
+if RSRC.exists():
+    rep = Image.open(RSRC).convert("RGB")
+    w, h = rep.size
+    # 7절 제목 바로 위에서 자른다. 앞 절의 마지막 줄이 딸려오면 지저분하다.
+    band = rep.crop((0, int(h * 0.752), w, h))
+    # 아래쪽 꼬리말 여백을 잘라낸다
+    g = band.convert("L")
+    ins = int(w * 0.02)
+    bb = g.crop((ins, 0, w - ins, band.height)).point(
+        lambda v: 255 if v < 238 else 0).getbbox()
+    if bb:
+        band = band.crop((0, max(0, bb[1] - 12), w, min(band.height, bb[3] + 12)))
+    fig, ax = plt.subplots(figsize=(11.4, 11.4 * band.height / band.width))
+    ax.imshow(np.asarray(band))
+    ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_color(RULE); s.set_linewidth(0.9)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(OUT / "fig_timephase.png", dpi=DPI)
+    plt.close(fig)
+
 print("saved:", sorted(p.name for p in OUT.glob("*.png")))
