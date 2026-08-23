@@ -208,8 +208,8 @@ def slide_pipeline_native(prs):
         ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, a, b, c_, d)
         ln.line.color.rgb = RULE
         ln.line.width = Pt(1.0)
-    txt(s, x0, bar_y + Cm(0.1), Cm(10), Cm(0.8),
-        "입력 ― 네 개의 계약 파일", 10.5, MUTED)
+    txt(s, span_r - Cm(10), bar_y + Cm(0.15), Cm(10), Cm(0.8),
+        "입력 ― 네 개의 계약 파일", 10.5, MUTED, False, PP_ALIGN.RIGHT)
 
     # ── 하단: 복셀화 → 처방 한 줄 ─────────────────────────────────────
     CHAIN = [("복셀화 + 광선투사", "ρ · θ · o", False),
@@ -232,14 +232,18 @@ def slide_pipeline_native(prs):
     drop_x = cx0 + int(CW / 2)
     connect(drop_x, bar_y, drop_x, cy)
 
-    txt(s, Cm(1.6), Cm(14.6), Cm(30.6), Cm(1.2),
+    txt(s, cx0, Cm(13.9), Cm(28), Cm(0.9),
+        "ρ 화면 속 머리 크기(픽셀)   ·   θ 내려다보는 각도   ·   "
+        "o 가려진 정도   ·   P 검출확률", 10.5, INK)
+
+    txt(s, Cm(1.6), Cm(15.0), Cm(30.6), Cm(1.2),
         "그림 4. 처리 흐름. 입력은 네 개의 계약 파일이며 실제 도면·계획서를 "
         "그 형식으로 넣으면 그대로 돈다.", 13, INK, True)
-    txt(s, Cm(1.6), Cm(15.8), Cm(30.6), Cm(1.6),
+    txt(s, Cm(1.6), Cm(16.1), Cm(30.6), Cm(1.6),
         "굵은 테두리 상자 둘이 이 연구의 몫이다. 나머지는 기존 기법을 조합한 것이고, "
         "새로운 것은 검출확률을 실측해 연속값으로 다루는 것과 그 위에서 "
         "위험가중으로 채점한다는 점이다.", 11, MUTED)
-    txt(s, Cm(1.6), Cm(17.3), Cm(30.6), Cm(1.0),
+    txt(s, Cm(1.6), Cm(17.6), Cm(30.6), Cm(1.0),
         "★ 필수 · 도형이라 PPT 에서 바로 수정된다. 그림 파일 판은 "
         "outputs/figures/fig_pipeline.png", 10, ACCENT)
     return s
@@ -324,13 +328,13 @@ def build():
         "선택 · 스크린샷이라 해상도 확인 필요")
 
     slide_fig(
-        prs, "8", "스마트 안전보고서", "../../docs/screenshots/safety-report.png",
-        "그림 8. 자동 생성되는 A4 보고서. 시행규칙 별표 7 의 CCTV 설치·운용계획 "
-        "칸을 채운다.",
+        prs, "8", "스마트 안전보고서", "fig_report.png",
+        "그림 8. 자동 생성되는 안전보고서. 건설기술진흥법 시행규칙 별표 7 의 "
+        "CCTV 설치·운용계획 칸을 채운다.",
         "§5 적용성 / §6 파급효과",
-        "\"이대로 제출된다\"를 보이는 그림. 법정 서류에 자리가 있다는 §1 논거와 "
-        "짝을 이룬다.",
-        "선택")
+        "A4 한 장을 그대로 넣으면 1:2.9 로 길쭉해 글씨가 안 읽힌다. 세로로 "
+        "반을 갈라 좌우로 놓아 1:0.7 로 만들었다. 긴 표는 앞부분만 남겼다.",
+        "★ 필수로 올림 · 법정 서류에 자리가 있다는 §1 논거와 짝을 이룬다")
 
     slide_fig(
         prs, "9", "시간대별 위험구역 진단", "../../docs/screenshots/time-phased.png",

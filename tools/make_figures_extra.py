@@ -152,7 +152,7 @@ plt.close(fig)
 # 갈래가 없으니 굽은 화살표도 없어야 한다 ― 읽는 눈이 한 방향으로만 간다.
 fig, ax = plt.subplots(figsize=(11.4, 3.05))
 # 내용이 y 9~38 에만 있다. 0~40 으로 두면 아래가 통째로 빈다
-ax.set_xlim(-1, 101); ax.set_ylim(9.3, 39.0); ax.axis("off")
+ax.set_xlim(-1, 101); ax.set_ylim(8.9, 39.0); ax.axis("off")
 
 
 def box(x, y, w, hgt, title, sub, hot=False, fs=11.5, fss=9.0):
@@ -208,7 +208,11 @@ for i, (t1, t2, hot) in enumerate(CHAIN):
     if i:
         arrow(x - CGAP + 0.2, 17.3, x - 0.2, 17.3)
 
-ax.text(cx0 - 0.4, 10.4,
+# 상자 안에 기호만 적어두면 처음 보는 사람이 못 읽는다. 한 줄로 풀어 준다.
+ax.text(cx0, 11.6,
+        "ρ 화면 속 머리 크기(픽셀)   ·   θ 내려다보는 각도   ·   "
+        "o 가려진 정도   ·   P 검출확률", fontsize=9.5, color=INK)
+ax.text(cx0, 9.9,
         "실제 도면·계획서를 계약 형식으로 넣으면 그대로 돈다. "
         "굵은 테두리 상자가 이 연구의 몫이다.", fontsize=9.5, color=MUTED)
 fig.tight_layout()
@@ -225,10 +229,9 @@ if have:
     fig, axes = plt.subplots(1, len(have), figsize=(11.4, 4.4))
     axes = np.atleast_1d(axes)
     for ax, (p, t1, t2) in zip(axes, have):
-        # **표시용 흑백 변환이다.** 검출은 원본 컬러로 돌렸고 여기서만 회색으로
-        # 바꿔 그린다. 무채색 규칙을 지키기 위한 것이며 실험 조건과 무관하다.
-        ax.imshow(np.asarray(Image.open(p).convert("L")), cmap="gray",
-                  vmin=0, vmax=255)
+        # 사진은 원본 컬러 그대로 둔다. 무채색 규칙은 우리가 그리는 도해에
+        # 적용하는 것이고, 사진은 검출기가 실제로 본 것이라 손대지 않는다.
+        ax.imshow(plt.imread(p))
         ax.set_xticks([]); ax.set_yticks([])
         for s in ax.spines.values():
             s.set_color(RULE); s.set_linewidth(0.9)
@@ -236,6 +239,45 @@ if have:
         ax.set_xlabel(t2, fontsize=10.5, color=MUTED, labelpad=6)
     fig.tight_layout(w_pad=2.0)
     fig.savefig(OUT / "fig_samples.png", dpi=DPI)
+    plt.close(fig)
+
+# ══ E. 안전보고서 지면 ― 두 단으로 쪼갠다 ═════════════════════════════════
+# A4 보고서를 한 장으로 넣으면 1:2.9 로 길쭉해져 지면에서 글씨가 안 읽힌다.
+# 세로로 반을 갈라 좌우로 놓으면 1:1.4 가 되고 같은 폭에서 글자가 두 배 커진다.
+# 캡처는 tools/capture_report.py 가 만든다(긴 표는 앞부분만 남긴다).
+SRC = OUT / "_report_full.png"
+if SRC.exists():
+    src = Image.open(SRC).convert("RGB")
+    w, h = src.size
+    half = h // 2
+    # 자르는 자리에서 글자가 반토막 나지 않게 흰 가로줄을 찾아 붙인다
+    px = src.load()
+    best, span = half, 60
+    for d in range(0, span):
+        for cand in (half - d, half + d):
+            if all(px[x, cand] == (255, 255, 255) for x in range(0, w, 7)):
+                best = cand
+                break
+        else:
+            continue
+        break
+    cols = [src.crop((0, 0, w, best)), src.crop((0, best, w, h))]
+    ch = max(c.height for c in cols)
+    GAP, PAD = 26, 2
+    canvas = Image.new("RGB", (w * 2 + GAP, ch), "#FFFFFF")
+    for k, c in enumerate(cols):
+        canvas.paste(c, (k * (w + GAP), 0))
+    # 브라우저 서브픽셀 렌더링이 글자 가장자리에 색을 남긴다. 회색조로 굳힌다.
+    canvas = canvas.convert("L").convert("RGB")
+    fig, ax = plt.subplots(figsize=(11.4, 11.4 * ch / (w * 2 + GAP)))
+    ax.imshow(np.asarray(canvas))
+    ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_color(RULE); s.set_linewidth(0.9)
+    # 가운데 이음선 ― 두 단이 이어진 한 장임을 보인다
+    ax.axvline(w + GAP / 2, color=RULE, lw=0.9)
+    fig.tight_layout(pad=0.4)
+    fig.savefig(OUT / "fig_report.png", dpi=DPI)
     plt.close(fig)
 
 print("saved:", sorted(p.name for p in OUT.glob("*.png")))
