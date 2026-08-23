@@ -24,6 +24,13 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 for _p in F.all_files():
     font_manager.fontManager.addfont(str(_p))
+# ── 배경을 순백으로 덮어쓴다 ────────────────────────────────────────────
+# theme.py 는 따뜻한 미색(FBFAF6)을 쓰고 순백을 금한다. 화면과 슬라이드에서는
+# 그게 맞다. 그런데 **이 그림들은 한글 문서에 들어간다.** 한글 지면은 순백이라
+# 미색 배경이면 그림마다 옅은 회색 사각형이 생긴다. 그래서 여기서만 뒤집는다.
+# 잉크·강조색은 그대로 두므로 편집 톤은 유지된다.
+T.HEX["paper"] = "#FFFFFF"
+
 plt.rcParams.update({
     "font.family": T.TEXT,
     "axes.unicode_minus": True,

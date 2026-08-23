@@ -32,7 +32,8 @@ W, H = Cm(33.87), Cm(19.05)
 INK = RGBColor(0x1C, 0x1A, 0x17)
 MUTED = RGBColor(0x77, 0x72, 0x6A)
 ACCENT = RGBColor(0xA3, 0x3B, 0x29)
-PAPER = RGBColor(0xFB, 0xFA, 0xF6)
+# 그림 배경이 순백이라 슬라이드도 맞춘다. 미색이면 그림 테두리가 드러난다
+PAPER = RGBColor(0xFF, 0xFF, 0xFF)
 FONT = "맑은 고딕"
 
 sr = json.loads((ROOT / "outputs" / "safety_report.json").read_text(encoding="utf-8"))
