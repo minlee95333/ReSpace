@@ -45,7 +45,14 @@ cm = json.loads((ROOT / "outputs" / "comparison.json").read_text(encoding="utf-8
 rows = list(csv.DictReader((ROOT / "outputs" / "grid_results.csv").open(encoding="utf-8")))
 for r in rows:
     for k in r:
-        r[k] = float(r[k]) if r[k] not in ("", "None") else None
+        # detector 처럼 숫자가 아닌 열이 나중에 붙었다. 통째로 float 하면 깨진다
+        try:
+            r[k] = float(r[k]) if r[k] not in ("", "None") else None
+        except ValueError:
+            pass
+# 곡선이 탐지 항목별로 갈리면서 파라미터가 per_target 아래로 내려갔다.
+# 주 지표(미착용)의 것을 쓴다.
+cp = cp["per_target"][cp["primary"]] if "per_target" in cp else cp
 BASE = cp["baseline_P"]
 
 
@@ -117,7 +124,7 @@ axes[2].annotate(f"15% → {o15['recall_nohat']/BASE*100:.0f}%",
                  fontsize=13.5, color=T.HEX["accent"], fontweight="bold",
                  arrowprops=dict(arrowstyle="-", color=T.HEX["accent"], lw=1.1))
 fig.tight_layout(w_pad=2.8)
-fig.savefig(OUT / "fig_curves.png", dpi=220)
+fig.savefig(OUT / "fig_curves.png", dpi=300)
 plt.close(fig)
 
 # ══ 2. 3단 비교 ― 평균은 붙고 꼬리는 벌어진다 (ADDENDUM-01 §5.4) ══════════
@@ -155,7 +162,7 @@ for ax, key, xlabel, fmt in (
     ax.set_xlabel(xlabel, color=T.HEX["muted"], fontsize=12, labelpad=8)
 
 fig.tight_layout(w_pad=5.0)
-fig.savefig(OUT / "fig_three.png", dpi=220)
+fig.savefig(OUT / "fig_three.png", dpi=300)
 plt.close(fig)
 
 print("saved:", sorted(p.name for p in OUT.glob("*.png")))
