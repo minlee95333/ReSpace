@@ -134,44 +134,67 @@ fig.savefig(OUT / "fig_prescribe.png", dpi=DPI)
 plt.close(fig)
 
 # ══ C. 파이프라인 흐름도 ═══════════════════════════════════════════════════
-fig, ax = plt.subplots(figsize=(11.4, 3.5))
-ax.set_xlim(0, 100); ax.set_ylim(0, 34); ax.axis("off")
+# 입력 넷을 상단에 가로로 묶고, 복셀화부터 처방까지는 한 줄로 흐른다.
+# 갈래가 없으니 굽은 화살표도 없어야 한다 ― 읽는 눈이 한 방향으로만 간다.
+fig, ax = plt.subplots(figsize=(11.4, 3.05))
+# 내용이 y 9~38 에만 있다. 0~40 으로 두면 아래가 통째로 빈다
+ax.set_xlim(-1, 101); ax.set_ylim(8.6, 39.0); ax.axis("off")
 
-def box(x, y, w, hgt, title, sub, hot=False):
+
+def box(x, y, w, hgt, title, sub, hot=False, fs=11.5, fss=9.0):
     ax.add_patch(mp.FancyBboxPatch(
-        (x, y), w, hgt, boxstyle="round,pad=0.35,rounding_size=0.8",
+        (x, y), w, hgt, boxstyle="round,pad=0.3,rounding_size=0.7",
         linewidth=1.1, edgecolor=ACCENT if hot else RULE,
-        facecolor=PAPER, zorder=2))
-    ax.text(x + w / 2, y + hgt * 0.62, title, ha="center", va="center",
-            fontsize=12, color=ACCENT if hot else INK, fontweight="bold")
+        facecolor=PAPER, zorder=3))
+    ax.text(x + w / 2, y + hgt * (0.63 if sub else 0.5), title,
+            ha="center", va="center", fontsize=fs,
+            color=ACCENT if hot else INK, fontweight="bold", zorder=4)
     if sub:
-        ax.text(x + w / 2, y + hgt * 0.24, sub, ha="center", va="center",
-                fontsize=9.5, color=MUTED)
+        ax.text(x + w / 2, y + hgt * 0.25, sub, ha="center", va="center",
+                fontsize=fss, color=MUTED, zorder=4)
 
-def arrow(x1, y1, x2, y2):
-    ax.annotate("", xy=(x2, y2), xytext=(x1, y1),
-                arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.1,
-                                shrinkA=0, shrinkB=0))
 
-INPUTS = [("CCTV 계획서", "위치·방위·화각"), ("골조 형상", "도면·BIM"),
+def arrow(x1, y1, x2, y2, color=None):
+    ax.annotate("", xy=(x2, y2), xytext=(x1, y1), zorder=2,
+                arrowprops=dict(arrowstyle="-|>", color=color or MUTED,
+                                lw=1.2, shrinkA=0, shrinkB=0))
+
+
+# ── 상단: 입력 네 개를 가로로 ──────────────────────────────────────────
+INPUTS = [("CCTV 계획서", "위치·높이·방위·화각"), ("골조 형상", "도면·BIM·실측"),
           ("위험구역", "안전관리계획서"), ("공정표", "시간대별 작업")]
+IW, IGAP = 22.6, 3.2
+x0 = (100 - (len(INPUTS) * IW + (len(INPUTS) - 1) * IGAP)) / 2
 for i, (t1, t2) in enumerate(INPUTS):
-    box(1, 26.5 - i * 7.0, 21, 5.6, t1, t2)
-    arrow(22.4, 29.3 - i * 7.0, 26.5, 17.5)
+    box(x0 + i * (IW + IGAP), 30.5, IW, 7.4, t1, t2)
 
-box(26.5, 14.6, 20, 5.8, "복셀화 + 광선투사", "ρ · θ · o 계산")
-arrow(47, 17.5, 51.5, 17.5)
-box(51.5, 14.6, 20, 5.8, "실측 검출확률 곡선", "P = f(ρ)·g(θ)·h(o)", hot=True)
-arrow(72, 17.5, 76.5, 17.5)
-box(76.5, 14.6, 21, 5.8, "다중 카메라 결합", "P = 1 - Π(1-P)")
+# 묶음 표시 ― 네 개가 한 덩어리임을 가로선 하나로 보인다
+ax.plot([x0, x0 + 4 * IW + 3 * IGAP], [28.4, 28.4], color=RULE, lw=1.0, zorder=1)
+for xx in (x0, x0 + 4 * IW + 3 * IGAP):
+    ax.plot([xx, xx], [28.4, 29.6], color=RULE, lw=1.0, zorder=1)
+ax.text(x0 - 0.4, 26.4, "입력 ― 네 개의 계약 파일", fontsize=10, color=MUTED)
 
-arrow(87, 14.2, 87, 10.4)
-box(76.5, 4.6, 21, 5.6, "100점 채점", "구역별 배점 × 달성률", hot=True)
-arrow(76.1, 7.4, 60, 7.4)
-box(39, 4.6, 21, 5.6, "처방", "재배치 → 증설")
+# 묶음에서 **첫 단계로** 내려간다. 가운데로 떨어뜨리면 세 번째 상자를 가리켜
+# 입력이 중간에 끼어드는 것처럼 읽힌다.
+CW, CGAP = 17.4, 3.2
+cx0 = (100 - (5 * CW + 4 * CGAP)) / 2
+arrow(cx0 + CW / 2, 28.2, cx0 + CW / 2, 21.4)
 
-ax.text(1, 1.4, "입력은 네 개의 계약 파일이다. 실제 도면·계획서를 그 형식으로 "
-                "넣으면 그대로 돈다.", fontsize=10, color=MUTED)
+# ── 하단: 복셀화부터 처방까지 한 줄 ────────────────────────────────────
+CHAIN = [("복셀화 + 광선투사", "ρ · θ · o", False),
+         ("검출확률 곡선", "f(ρ)·g(θ)·h(o)", True),
+         ("다중 카메라 결합", "1 - Π(1-P)", False),
+         ("100점 채점", "배점 × 달성률", True),
+         ("처방", "재배치 → 증설", False)]
+for i, (t1, t2, hot) in enumerate(CHAIN):
+    x = cx0 + i * (CW + CGAP)
+    box(x, 13.6, CW, 7.4, t1, t2, hot=hot, fs=10.8, fss=8.6)
+    if i:
+        arrow(x - CGAP + 0.2, 17.3, x - 0.2, 17.3)
+
+ax.text(cx0 - 0.4, 10.4,
+        "실제 도면·계획서를 계약 형식으로 넣으면 그대로 돈다. "
+        "붉은 상자가 이 연구의 몫이다.", fontsize=9.5, color=MUTED)
 fig.tight_layout()
 fig.savefig(OUT / "fig_pipeline.png", dpi=DPI)
 plt.close(fig)

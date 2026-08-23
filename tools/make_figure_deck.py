@@ -26,6 +26,26 @@ ROOT = Path(__file__).resolve().parents[1]
 FIG = ROOT / "outputs" / "figures"
 OUT = ROOT / "outputs" / "BIGB_그림_0823.pptx"
 
+
+def _free(path: Path) -> Path:
+    """파일이 잠겨 있으면(파워포인트로 열려 있으면) 옆 이름으로 낸다.
+
+    덮어쓰기를 시도하면 PermissionError 로 죽고, 강제로 덮으면 사용자가
+    편집 중이던 내용이 날아간다. 둘 다 하지 않는다.
+    """
+    try:
+        with open(path, "ab"):
+            return path
+    except PermissionError:
+        for i in range(2, 20):
+            alt = path.with_name(f"{path.stem}_v{i}{path.suffix}")
+            try:
+                with open(alt, "ab"):
+                    return alt
+            except PermissionError:
+                continue
+        raise
+
 # 16:9
 W, H = Cm(33.87), Cm(19.05)
 
@@ -34,6 +54,7 @@ MUTED = RGBColor(0x77, 0x72, 0x6A)
 ACCENT = RGBColor(0xA3, 0x3B, 0x29)
 # 그림 배경이 순백이라 슬라이드도 맞춘다. 미색이면 그림 테두리가 드러난다
 PAPER = RGBColor(0xFF, 0xFF, 0xFF)
+RULE = RGBColor(0xD5, 0xCF, 0xC2)
 FONT = "맑은 고딕"
 
 sr = json.loads((ROOT / "outputs" / "safety_report.json").read_text(encoding="utf-8"))
@@ -100,6 +121,128 @@ def slide_fig(prs, no, title, png, caption, section, why, note=None):
     return s
 
 
+def slide_pipeline_native(prs):
+    """파이프라인을 **네이티브 도형**으로 그린다.
+
+    그림 파일로 넣으면 PPT 에서 글자 하나 못 고친다. 이 장만은 도형·화살표·
+    글상자로 만들어 파워포인트에서 그대로 편집할 수 있게 한다. 상자를 끌어
+    옮기고 문구를 고치고 색을 바꾸는 일이 전부 된다.
+
+    배치는 두 단이다. 입력 넷을 상단에 가로로 묶고, 복셀화부터 처방까지는
+    한 줄로 흐른다. 갈래가 없으니 굽은 화살표도 없다.
+    """
+    from pptx.enum.shapes import MSO_SHAPE, MSO_CONNECTOR
+    from pptx.enum.text import MSO_ANCHOR
+    from pptx.util import Emu
+
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    s.background.fill.solid()
+    s.background.fill.fore_color.rgb = PAPER
+
+    txt(s, Cm(1.6), Cm(0.8), Cm(24), Cm(1.2), "그림 4", 13, ACCENT, True)
+    txt(s, Cm(1.6), Cm(1.7), Cm(30), Cm(1.4), "입력에서 처방까지", 22, INK, True)
+    txt(s, Cm(26.5), Cm(0.9), Cm(6), Cm(1.0), "§3 개선방안", 12, MUTED, True,
+        PP_ALIGN.RIGHT)
+    txt(s, Cm(24.2), Cm(2.1), Cm(8.4), Cm(1.0),
+        "이 장은 도형이라 PPT 에서 편집됩니다", 10, ACCENT, False, PP_ALIGN.RIGHT)
+
+    def node(x, y, w, hgt, title, sub, hot=False, t_size=13, s_size=10):
+        sh = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, hgt)
+        sh.adjustments[0] = 0.09
+        sh.fill.solid()
+        sh.fill.fore_color.rgb = PAPER
+        sh.line.color.rgb = ACCENT if hot else RULE
+        sh.line.width = Pt(1.1)
+        sh.shadow.inherit = False
+        tf = sh.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        tf.margin_left = tf.margin_right = Cm(0.15)
+        tf.margin_top = tf.margin_bottom = Cm(0.1)
+        p0 = tf.paragraphs[0]
+        p0.alignment = PP_ALIGN.CENTER
+        r = p0.add_run(); r.text = title
+        r.font.size = Pt(t_size); r.font.bold = True
+        r.font.color.rgb = ACCENT if hot else INK
+        r.font.name = FONT
+        if sub:
+            p1 = tf.add_paragraph()
+            p1.alignment = PP_ALIGN.CENTER
+            p1.space_before = Pt(2)
+            r1 = p1.add_run(); r1.text = sub
+            r1.font.size = Pt(s_size)
+            r1.font.color.rgb = MUTED
+            r1.font.name = FONT
+        return sh
+
+    def connect(x1, y1, x2, y2):
+        c = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x1, y1, x2, y2)
+        c.line.color.rgb = MUTED
+        c.line.width = Pt(1.2)
+        # 화살촉은 python-pptx 가 직접 안 열어준다. XML 로 붙인다
+        ln = c.line._get_or_add_ln()
+        from pptx.oxml.ns import qn as _qn
+        import copy
+        tail = ln.makeelement(_qn("a:tailEnd"), {"type": "triangle",
+                                                 "w": "med", "len": "med"})
+        ln.append(tail)
+        return c
+
+    # ── 상단: 입력 넷 ─────────────────────────────────────────────────
+    INPUTS = [("CCTV 계획서", "위치·높이·방위·화각"), ("골조 형상", "도면·BIM·실측"),
+              ("위험구역", "안전관리계획서"), ("공정표", "시간대별 작업")]
+    IW, IGAP, IH = Cm(6.9), Cm(1.0), Cm(2.2)
+    x0 = int((prs.slide_width - (4 * IW + 3 * IGAP)) / 2)
+    top = Cm(4.3)
+    for i, (t1, t2) in enumerate(INPUTS):
+        node(x0 + i * (IW + IGAP), top, IW, IH, t1, t2, t_size=12.5, s_size=9.5)
+
+    # 묶음 표시 ― 가로선 하나와 양끝 짧은 세로선
+    span_r = x0 + 4 * IW + 3 * IGAP
+    bar_y = top + IH + Cm(0.55)
+    for a, b, c_, d in ((x0, bar_y, span_r, bar_y),
+                        (x0, bar_y - Cm(0.28), x0, bar_y),
+                        (span_r, bar_y - Cm(0.28), span_r, bar_y)):
+        ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, a, b, c_, d)
+        ln.line.color.rgb = RULE
+        ln.line.width = Pt(1.0)
+    txt(s, x0, bar_y + Cm(0.1), Cm(10), Cm(0.8),
+        "입력 ― 네 개의 계약 파일", 10.5, MUTED)
+
+    # ── 하단: 복셀화 → 처방 한 줄 ─────────────────────────────────────
+    CHAIN = [("복셀화 + 광선투사", "ρ · θ · o", False),
+             ("검출확률 곡선", "f(ρ)·g(θ)·h(o)", True),
+             ("다중 카메라 결합", "1 - Π(1-P)", False),
+             ("100점 채점", "배점 × 달성률", True),
+             ("처방", "재배치 → 증설", False)]
+    CW, CGAP, CH = Cm(5.5), Cm(1.0), Cm(2.3)
+    cx0 = int((prs.slide_width - (5 * CW + 4 * CGAP)) / 2)
+    cy = Cm(11.2)
+    mid = cy + int(CH / 2)
+    for i, (t1, t2, hot) in enumerate(CHAIN):
+        x = cx0 + i * (CW + CGAP)
+        node(x, cy, CW, CH, t1, t2, hot=hot, t_size=11.5, s_size=9.5)
+        if i:
+            connect(x - CGAP, mid, x, mid)
+
+    # 묶음 → **첫 단계**. 슬라이드 가운데로 떨어뜨리면 세 번째 상자를 가리켜
+    # 입력이 중간에 끼어드는 것처럼 읽힌다.
+    drop_x = cx0 + int(CW / 2)
+    connect(drop_x, bar_y, drop_x, cy)
+
+    txt(s, Cm(1.6), Cm(14.6), Cm(30.6), Cm(1.2),
+        "그림 4. 처리 흐름. 입력은 네 개의 계약 파일이며 실제 도면·계획서를 "
+        "그 형식으로 넣으면 그대로 돈다.", 13, INK, True)
+    txt(s, Cm(1.6), Cm(15.8), Cm(30.6), Cm(1.6),
+        "붉은 상자 둘이 이 연구의 몫이다. 나머지는 기존 기법을 조합한 것이고, "
+        "새로운 것은 검출확률을 실측해 연속값으로 다루는 것과 그 위에서 "
+        "위험가중으로 채점한다는 점이다.", 11, MUTED)
+    txt(s, Cm(1.6), Cm(17.3), Cm(30.6), Cm(1.0),
+        "★ 필수 · 도형이라 PPT 에서 바로 수정된다. 그림 파일 판은 "
+        "outputs/figures/fig_pipeline.png", 10, ACCENT)
+    return s
+
+
 def build():
     prs = Presentation()
     prs.slide_width, prs.slide_height = W, H
@@ -147,14 +290,7 @@ def build():
         f"못 보는 자리가 3분의 1로 준다.",
         "★ 필수 · 핵심 실증. 평균이 아니라 꼬리를 보여주는 것이 요점")
 
-    slide_fig(
-        prs, "4", "입력에서 처방까지", "fig_pipeline.png",
-        "그림 4. 처리 흐름. 입력은 네 개의 계약 파일이며 실제 도면·계획서를 "
-        "그 형식으로 넣으면 그대로 돈다.",
-        "§3 개선방안 / §5 적용성",
-        "\"이게 실제로 돌아가는 물건인가\"에 답하는 그림. 입력이 현장에서 이미 "
-        "쓰는 서류라는 점이 적용성 근거가 된다.",
-        "★ 필수")
+    slide_pipeline_native(prs)
 
     slide_fig(
         prs, "5", "100점을 어디서 잃었나", "fig_score.png",
@@ -228,8 +364,9 @@ def build():
         "· 15매에 그림 9개면 실질 4~5쪽. 본문 분량을 먼저 잡고 넣는다",
         12.5, MUTED)
 
-    prs.save(OUT)
-    return OUT
+    out = _free(OUT)
+    prs.save(out)
+    return out
 
 
 if __name__ == "__main__":
