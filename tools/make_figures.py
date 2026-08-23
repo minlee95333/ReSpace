@@ -24,12 +24,18 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 for _p in F.all_files():
     font_manager.fontManager.addfont(str(_p))
-# ── 배경을 순백으로 덮어쓴다 ────────────────────────────────────────────
-# theme.py 는 따뜻한 미색(FBFAF6)을 쓰고 순백을 금한다. 화면과 슬라이드에서는
-# 그게 맞다. 그런데 **이 그림들은 한글 문서에 들어간다.** 한글 지면은 순백이라
-# 미색 배경이면 그림마다 옅은 회색 사각형이 생긴다. 그래서 여기서만 뒤집는다.
-# 잉크·강조색은 그대로 두므로 편집 톤은 유지된다.
+# ── 무채색 팔레트 ───────────────────────────────────────────────────────
+# **검정·흰색·회색만 쓴다.** theme.py 의 미색 바탕과 붉은 강조색을 여기서
+# 덮어쓴다. 강조는 색이 아니라 명도와 굵기로 한다 — 짙은 회색 대 옅은 회색,
+# 굵게 대 보통. 흑백 출력에서 잃을 정보가 애초에 없어진다.
 T.HEX["paper"] = "#FFFFFF"
+T.HEX["ink"] = "#1A1A1A"
+T.HEX["body"] = "#2B2B2B"
+T.HEX["muted"] = "#6E6E6E"
+T.HEX["faint"] = "#9A9A9A"
+T.HEX["rule"] = "#C9C9C9"
+T.HEX["accent"] = "#1A1A1A"     # 강조 = 검정
+T.HEX["neutral"] = "#B4B4B4"    # 대조군 = 옅은 회색
 
 plt.rcParams.update({
     "font.family": T.TEXT,
@@ -126,10 +132,13 @@ for ax in axes[1:]:
 
 o15 = [p for p in section({"rho_px": 48.0, "theta_deg": 0.0})
        if abs(p["occ_pct_target"] - 15) < 1e-6][0]
-axes[2].annotate(f"15% → {o15['recall_nohat']/BASE*100:.0f}%",
-                 xy=(15.6, o15["recall_nohat"] / BASE + 0.02), xytext=(27, 0.88),
-                 fontsize=13.5, color=T.HEX["accent"], fontweight="bold",
-                 arrowprops=dict(arrowstyle="-", color=T.HEX["accent"], lw=1.1))
+# 지시선을 쓰지 않는다 ― 선이 곡선을 가로지른다. 빈자리에 글씨만 둔다.
+_pct = o15["recall_nohat"] / BASE * 100
+axes[2].text(40, 0.90, "가림 15%에서", fontsize=12.5, color=T.HEX["ink"],
+             fontweight="bold", ha="left", va="top")
+axes[2].text(40, 0.74, f"{_pct:.0f}%로 떨어진다", fontsize=12.5,
+             color=T.HEX["ink"], fontweight="bold", ha="left", va="top")
+
 fig.tight_layout(w_pad=2.8)
 fig.savefig(OUT / "fig_curves.png", dpi=300)
 plt.close(fig)

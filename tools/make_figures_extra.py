@@ -18,6 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mp
+from PIL import Image
 import numpy as np
 from matplotlib import font_manager
 
@@ -31,12 +32,18 @@ DPI = 300          # 인쇄용. 종전 220 에서 올렸다
 
 for _p in F.all_files():
     font_manager.fontManager.addfont(str(_p))
-# ── 배경을 순백으로 덮어쓴다 ────────────────────────────────────────────
-# theme.py 는 따뜻한 미색(FBFAF6)을 쓰고 순백을 금한다. 화면과 슬라이드에서는
-# 그게 맞다. 그런데 **이 그림들은 한글 문서에 들어간다.** 한글 지면은 순백이라
-# 미색 배경이면 그림마다 옅은 회색 사각형이 생긴다. 그래서 여기서만 뒤집는다.
-# 잉크·강조색은 그대로 두므로 편집 톤은 유지된다.
+# ── 무채색 팔레트 ───────────────────────────────────────────────────────
+# **검정·흰색·회색만 쓴다.** theme.py 의 미색 바탕과 붉은 강조색을 여기서
+# 덮어쓴다. 강조는 색이 아니라 명도와 굵기로 한다 — 짙은 회색 대 옅은 회색,
+# 굵게 대 보통. 흑백 출력에서 잃을 정보가 애초에 없어진다.
 T.HEX["paper"] = "#FFFFFF"
+T.HEX["ink"] = "#1A1A1A"
+T.HEX["body"] = "#2B2B2B"
+T.HEX["muted"] = "#6E6E6E"
+T.HEX["faint"] = "#9A9A9A"
+T.HEX["rule"] = "#C9C9C9"
+T.HEX["accent"] = "#1A1A1A"     # 강조 = 검정
+T.HEX["neutral"] = "#B4B4B4"    # 대조군 = 옅은 회색
 
 plt.rcParams.update({
     "font.family": T.TEXT,
@@ -69,7 +76,7 @@ def bare(ax, keep=("bottom",)):
 
 
 # ══ A. 채점 분해 ― 배점 중 얼마를 얻었나 ═══════════════════════════════════
-# 빗금으로 '잃은 점수'를 표시한다. 색을 못 쓰는 흑백 출력에서도 읽힌다.
+# 빗금으로 '잃은 점수'를, 명도로 치명 여부를 나눈다. 색을 쓰지 않는다.
 rows = [r for r in sd["rows"] if r["zone"] != "_background"]
 rows = sorted(rows, key=lambda r: (-r["weight"], r["zone"]))
 labels = [r["label"].replace(" (", "\n(") for r in rows]
@@ -96,7 +103,7 @@ bare(ax, keep=())
 ax.text(0, len(rows) - 0.05, f"총점 {sd['total']:.1f} / 100   등급 {sd['grade']}",
         fontsize=15, color=ACCENT, fontweight="bold", va="bottom")
 ax.text(max(alloc) * 0.62, len(rows) - 0.05,
-        "빗금 = 배점,  채움 = 획득,  붉은색 = 치명 구역 미달",
+        "빗금 = 배점,  채움 = 획득,  검정 = 치명 구역 미달",
         fontsize=11, color=MUTED, va="bottom")
 fig.tight_layout()
 fig.savefig(OUT / "fig_score.png", dpi=DPI)
@@ -113,20 +120,27 @@ if pres.get("resulting") is not None:
 
 fig, ax = plt.subplots(figsize=(7.6, 3.6))
 x = np.arange(len(opts))
+# 목표선은 **막대 뒤**에 둔다(zorder 1). 앞에 두면 막대를 가로지른다.
+# 왼쪽 라벨 자리까지 선을 끌지 않는다 ― 글씨에 닿는다.
+tgt = sr["standard"]["target"] * 100
+ax.set_xlim(-0.62, len(opts) - 0.38)
+ax.plot([-0.28, len(opts) - 0.45], [tgt, tgt], color=RULE, lw=1.0,
+        ls=(0, (5, 4)), zorder=1)
+ax.text(-0.58, tgt + 2.0, f"목표 {tgt:.0f}점", ha="left", va="bottom",
+        fontsize=11, color=MUTED)
+
 for i, (lab, val, crit, ok) in enumerate(opts):
     ax.bar(i, val, width=0.5, color=ACCENT if ok else NEUTRAL, zorder=3)
-    ax.text(i, val + 2.0, f"{val:.1f}점", ha="center", fontsize=14,
-            color=ACCENT if ok else INK, fontweight="bold")
+    # 글씨를 막대 안에 넣지 않는다. 전부 막대 위 빈자리로 올리고, va 를
+    # bottom 으로 고정해 글자 아랫변이 막대 윗변에 닿지 않게 한다.
     tag = "치명 구역 0곳" if crit == 0 else f"치명 구역 {crit}곳 남음"
-    ax.text(i, 4, tag, ha="center", fontsize=11,
-            color=PAPER if val > 20 else MUTED)
-tgt = sr["standard"]["target"] * 100
-ax.axhline(tgt, color=INK, lw=1.0, ls=(0, (5, 4)), zorder=4)
-ax.text(len(opts) - 0.42, tgt + 1.6, f"목표 {tgt:.0f}점", ha="right",
-        fontsize=11.5, color=INK)
+    ax.text(i, val + 9.5, f"{val:.1f}점", ha="center", va="bottom",
+            fontsize=14, color=INK, fontweight="bold")
+    ax.text(i, val + 3.2, tag, ha="center", va="bottom",
+            fontsize=10.5, color=MUTED)
 ax.set_xticks(x)
 ax.set_xticklabels([o[0] for o in opts], fontsize=12.5, color=INK)
-ax.set_ylim(0, 118)
+ax.set_ylim(0, 134)
 ax.set_yticks([])
 bare(ax)
 fig.tight_layout()
@@ -138,7 +152,7 @@ plt.close(fig)
 # 갈래가 없으니 굽은 화살표도 없어야 한다 ― 읽는 눈이 한 방향으로만 간다.
 fig, ax = plt.subplots(figsize=(11.4, 3.05))
 # 내용이 y 9~38 에만 있다. 0~40 으로 두면 아래가 통째로 빈다
-ax.set_xlim(-1, 101); ax.set_ylim(8.6, 39.0); ax.axis("off")
+ax.set_xlim(-1, 101); ax.set_ylim(9.3, 39.0); ax.axis("off")
 
 
 def box(x, y, w, hgt, title, sub, hot=False, fs=11.5, fss=9.0):
@@ -172,7 +186,9 @@ for i, (t1, t2) in enumerate(INPUTS):
 ax.plot([x0, x0 + 4 * IW + 3 * IGAP], [28.4, 28.4], color=RULE, lw=1.0, zorder=1)
 for xx in (x0, x0 + 4 * IW + 3 * IGAP):
     ax.plot([xx, xx], [28.4, 29.6], color=RULE, lw=1.0, zorder=1)
-ax.text(x0 - 0.4, 26.4, "입력 ― 네 개의 계약 파일", fontsize=10, color=MUTED)
+# 라벨을 오른쪽 끝에 둔다. 왼쪽에 두면 아래로 내려가는 화살표가 글씨를 가른다.
+ax.text(x0 + 4 * IW + 3 * IGAP, 26.4, "입력 ― 네 개의 계약 파일",
+        fontsize=10, color=MUTED, ha="right")
 
 # 묶음에서 **첫 단계로** 내려간다. 가운데로 떨어뜨리면 세 번째 상자를 가리켜
 # 입력이 중간에 끼어드는 것처럼 읽힌다.
@@ -194,7 +210,7 @@ for i, (t1, t2, hot) in enumerate(CHAIN):
 
 ax.text(cx0 - 0.4, 10.4,
         "실제 도면·계획서를 계약 형식으로 넣으면 그대로 돈다. "
-        "붉은 상자가 이 연구의 몫이다.", fontsize=9.5, color=MUTED)
+        "굵은 테두리 상자가 이 연구의 몫이다.", fontsize=9.5, color=MUTED)
 fig.tight_layout()
 fig.savefig(OUT / "fig_pipeline.png", dpi=DPI)
 plt.close(fig)
@@ -209,7 +225,10 @@ if have:
     fig, axes = plt.subplots(1, len(have), figsize=(11.4, 4.4))
     axes = np.atleast_1d(axes)
     for ax, (p, t1, t2) in zip(axes, have):
-        ax.imshow(plt.imread(p))
+        # **표시용 흑백 변환이다.** 검출은 원본 컬러로 돌렸고 여기서만 회색으로
+        # 바꿔 그린다. 무채색 규칙을 지키기 위한 것이며 실험 조건과 무관하다.
+        ax.imshow(np.asarray(Image.open(p).convert("L")), cmap="gray",
+                  vmin=0, vmax=255)
         ax.set_xticks([]); ax.set_yticks([])
         for s in ax.spines.values():
             s.set_color(RULE); s.set_linewidth(0.9)

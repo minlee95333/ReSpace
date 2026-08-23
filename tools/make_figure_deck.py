@@ -49,12 +49,13 @@ def _free(path: Path) -> Path:
 # 16:9
 W, H = Cm(33.87), Cm(19.05)
 
-INK = RGBColor(0x1C, 0x1A, 0x17)
-MUTED = RGBColor(0x77, 0x72, 0x6A)
-ACCENT = RGBColor(0xA3, 0x3B, 0x29)
+# **검정·흰색·회색만 쓴다.** 강조는 색이 아니라 명도와 굵기로 한다.
+INK = RGBColor(0x1A, 0x1A, 0x1A)
+MUTED = RGBColor(0x6E, 0x6E, 0x6E)
+ACCENT = RGBColor(0x1A, 0x1A, 0x1A)
 # 그림 배경이 순백이라 슬라이드도 맞춘다. 미색이면 그림 테두리가 드러난다
 PAPER = RGBColor(0xFF, 0xFF, 0xFF)
-RULE = RGBColor(0xD5, 0xCF, 0xC2)
+RULE = RGBColor(0xC9, 0xC9, 0xC9)
 FONT = "맑은 고딕"
 
 sr = json.loads((ROOT / "outputs" / "safety_report.json").read_text(encoding="utf-8"))
@@ -140,7 +141,7 @@ def slide_pipeline_native(prs):
     s.background.fill.fore_color.rgb = PAPER
 
     txt(s, Cm(1.6), Cm(0.8), Cm(24), Cm(1.2), "그림 4", 13, ACCENT, True)
-    txt(s, Cm(1.6), Cm(1.7), Cm(30), Cm(1.4), "입력에서 처방까지", 22, INK, True)
+    txt(s, Cm(1.6), Cm(1.7), Cm(21), Cm(1.4), "입력에서 처방까지", 22, INK, True)
     txt(s, Cm(26.5), Cm(0.9), Cm(6), Cm(1.0), "§3 개선방안", 12, MUTED, True,
         PP_ALIGN.RIGHT)
     txt(s, Cm(24.2), Cm(2.1), Cm(8.4), Cm(1.0),
@@ -151,8 +152,9 @@ def slide_pipeline_native(prs):
         sh.adjustments[0] = 0.09
         sh.fill.solid()
         sh.fill.fore_color.rgb = PAPER
-        sh.line.color.rgb = ACCENT if hot else RULE
-        sh.line.width = Pt(1.1)
+        # 강조는 색이 아니라 선 굵기다. 무채색만 쓰기 때문이다.
+        sh.line.color.rgb = INK if hot else RULE
+        sh.line.width = Pt(2.0) if hot else Pt(1.0)
         sh.shadow.inherit = False
         tf = sh.text_frame
         tf.word_wrap = True
@@ -234,7 +236,7 @@ def slide_pipeline_native(prs):
         "그림 4. 처리 흐름. 입력은 네 개의 계약 파일이며 실제 도면·계획서를 "
         "그 형식으로 넣으면 그대로 돈다.", 13, INK, True)
     txt(s, Cm(1.6), Cm(15.8), Cm(30.6), Cm(1.6),
-        "붉은 상자 둘이 이 연구의 몫이다. 나머지는 기존 기법을 조합한 것이고, "
+        "굵은 테두리 상자 둘이 이 연구의 몫이다. 나머지는 기존 기법을 조합한 것이고, "
         "새로운 것은 검출확률을 실측해 연속값으로 다루는 것과 그 위에서 "
         "위험가중으로 채점한다는 점이다.", 11, MUTED)
     txt(s, Cm(1.6), Cm(17.3), Cm(30.6), Cm(1.0),
