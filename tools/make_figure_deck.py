@@ -27,24 +27,33 @@ FIG = ROOT / "outputs" / "figures"
 OUT = ROOT / "outputs" / "BIGB_그림_0823.pptx"
 
 
-def _free(path: Path) -> Path:
-    """파일이 잠겨 있으면(파워포인트로 열려 있으면) 옆 이름으로 낸다.
+# 이미 있는 덱을 덮지 않는다. 사용자가 파워포인트에서 슬라이드를 고쳐 두면
+# 다시 뽑을 때 그 손질이 통째로 날아간다. 잠겨 있는지와 무관하게 옆 이름으로
+# 낸다. 다 쓴 옛 파일은 사용자가 지우면 된다.
+PRESERVE_EXISTING = True
 
-    덮어쓰기를 시도하면 PermissionError 로 죽고, 강제로 덮으면 사용자가
-    편집 중이던 내용이 날아간다. 둘 다 하지 않는다.
-    """
-    try:
-        with open(path, "ab"):
-            return path
-    except PermissionError:
-        for i in range(2, 20):
+
+def _free(path: Path) -> Path:
+    """이미 있거나 잠겨 있으면 옆 이름(_v2, _v3 …)으로 낸다."""
+    if PRESERVE_EXISTING and path.exists():
+        pass
+    else:
+        try:
+            with open(path, "ab"):
+                return path
+        except PermissionError:
+            pass
+    if True:
+        for i in range(2, 60):
             alt = path.with_name(f"{path.stem}_v{i}{path.suffix}")
+            if alt.exists():
+                continue
             try:
                 with open(alt, "ab"):
                     return alt
             except PermissionError:
                 continue
-        raise
+        raise RuntimeError("빈 이름을 못 찾았다. outputs/ 의 옛 _vN 을 정리할 것.")
 
 # 16:9
 W, H = Cm(33.87), Cm(19.05)
@@ -320,14 +329,14 @@ def build():
 
     # ── 선택 ──────────────────────────────────────────────────────────
     slide_fig(
-        prs, "7", "3D 검출확률 히트맵", "fig_3d.png",
+        prs, "7", "검출확률 히트맵 — 평면과 3D", "fig_3d.png",
         "그림 7. 심사자 화면. 복셀별 검출확률을 색으로, 카메라 위치와 화각을 "
         "부채꼴로 표시한다. 붉을수록 검출확률이 낮은 곳이다.",
         "§5 적용성",
-        "PT 승부처. 지면에서는 3D 한 장만 쓰고 2D/2.5D 전환은 발표에서 보인다. "
-        "이 그림만 컬러다 — 검출확률 히트맵은 색이 정보를 지기 때문이다. "
-        "부감각은 목업 기본 25°에서 58°로 올려 위에서 내려다보게 했다.",
-        "★ 필수로 올림 · tools/capture_mockup.py 가 다시 찍는다")
+        "평면은 어디가 안 보이는지 위치를 읽게 하고, 3D 는 층이 쌓여 있다는 것을 "
+        "보인다. 한 장만 쓰면 둘 중 하나를 잃는다. 이 그림만 컬러다 — "
+        "검출확률 히트맵은 색이 정보를 지기 때문이다.",
+        "★ 필수 · tools/capture_mockup.py 가 두 판을 다시 찍는다")
 
     slide_fig(
         prs, "8", "스마트 안전보고서", "fig_report.png",

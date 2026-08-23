@@ -29,7 +29,11 @@ import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 MOCKUP = ROOT / "mockup"
-OUT = ROOT / "outputs" / "figures" / "_mockup_3d.png"
+FIGDIR = ROOT / "outputs" / "figures"
+# 2D 평면과 3D 를 나란히 쓴다. 평면은 어디가 안 보이는지 위치를 읽게 하고,
+# 3D 는 층이 쌓여 있다는 것을 보인다. 둘이 서로를 보완한다.
+SHOTS = [("2d", FIGDIR / "_mockup_2d.png"),
+         ("3d", FIGDIR / "_mockup_3d.png")]
 PORT = 8793
 
 GRAYSCALE = False       # 이 그림만 컬러를 허용한다
@@ -113,7 +117,7 @@ def main():
                  "pip install playwright && playwright install chromium")
 
     srv = serve()
-    OUT.parent.mkdir(parents=True, exist_ok=True)
+    FIGDIR.mkdir(parents=True, exist_ok=True)
     try:
         with sync_playwright() as pw:
             b = pw.chromium.launch()
@@ -128,18 +132,20 @@ def main():
                 page.route("**/tokens.css", route_tokens)
             page.goto(f"http://127.0.0.1:{PORT}/index.html")
             page.wait_for_selector("canvas", timeout=30000)
-            # 3D 버튼을 누르기 전에 기준각을 바꾼다. setMode 가 이때 복사한다.
+            # 버튼을 누르기 전에 기준각을 바꾼다. setMode 가 이때 복사한다.
             page.evaluate("(p) => { window.CoverageViewer.PRESETS['3d'].pitch = p; }",
                           PITCH)
-            page.click('button[data-m="3d"]')
-            page.wait_for_timeout(1500)     # 캔버스가 한 프레임 더 돌 시간
-            page.locator("canvas").first.screenshot(path=str(OUT))
+            for mode, path in SHOTS:
+                page.click(f'button[data-m="{mode}"]')
+                page.wait_for_timeout(1500)   # 캔버스가 한 프레임 더 돌 시간
+                page.locator("canvas").first.screenshot(path=str(path))
             b.close()
     finally:
         srv.shutdown()
 
-    size = trim(OUT)
-    print(f"→ {OUT}  ({OUT.stat().st_size:,} bytes)  잘라낸 크기 {size}")
+    for mode, path in SHOTS:
+        size = trim(path)
+        print(f"→ {path.name}  ({path.stat().st_size:,} bytes)  {mode} · {size}")
 
 
 if __name__ == "__main__":

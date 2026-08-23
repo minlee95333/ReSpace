@@ -280,17 +280,31 @@ if SRC.exists():
     fig.savefig(OUT / "fig_report.png", dpi=DPI)
     plt.close(fig)
 
-# ══ F. 3D 검출확률 히트맵 ══════════════════════════════════════════════════
-# tools/capture_mockup.py 가 무채색으로 찍어 여백까지 잘라 둔 것을 액자에만 넣는다.
-M3D = OUT / "_mockup_3d.png"
-if M3D.exists():
-    src = Image.open(M3D).convert("RGB")
-    fig, ax = plt.subplots(figsize=(11.4, 11.4 * src.height / src.width))
-    ax.imshow(np.asarray(src))
-    ax.set_xticks([]); ax.set_yticks([])
-    for s in ax.spines.values():
-        s.set_color(RULE); s.set_linewidth(0.9)
-    fig.tight_layout(pad=0.3)
+# ══ F. 검출확률 히트맵 ― 평면과 3D 를 나란히 ═════════════════════════════
+# 평면은 **어디가** 안 보이는지 위치를 읽게 하고, 3D 는 층이 쌓여 있다는 것을
+# 보인다. 둘이 서로를 보완한다. 한 장만 쓰면 둘 중 하나를 잃는다.
+# 이 그림만 컬러다 ― 검출확률 히트맵은 색이 정보를 진다.
+PANES = [(OUT / "_mockup_2d.png", "평면 (2D)"),
+         (OUT / "_mockup_3d.png", "3D")]
+have = [(p, lab) for p, lab in PANES if p.exists()]
+if have:
+    ims = [Image.open(p).convert("RGB") for p, _ in have]
+    # 두 판의 가로세로비가 달라 그냥 나란히 놓으면 높이가 어긋나고 빈자리가 크게
+    # 남는다. 폭 비율을 각 그림의 비에 맞춰 주면 **높이가 같아진다**.
+    ars = [i.width / i.height for i in ims]
+    Wf = 11.4
+    Hf = Wf / (sum(ars) + 0.16 * len(ars))            # 여백 몫을 빼고 높이를 잡는다
+    # 아래 라벨 자리를 따로 확보한다. 1.10 이면 글자 아랫부분이 잘렸다.
+    fig, axes = plt.subplots(1, len(ims), figsize=(Wf, Hf * 1.22),
+                             gridspec_kw={"width_ratios": ars})
+    axes = np.atleast_1d(axes)
+    for ax, im, (_, lab) in zip(axes, ims, have):
+        ax.imshow(np.asarray(im))
+        ax.set_xticks([]); ax.set_yticks([])
+        for s in ax.spines.values():
+            s.set_color(RULE); s.set_linewidth(0.9)
+        ax.set_xlabel(lab, fontsize=11, color=MUTED, labelpad=7)
+    fig.tight_layout(w_pad=2.2, pad=0.9)
     fig.savefig(OUT / "fig_3d.png", dpi=DPI)
     plt.close(fig)
 
