@@ -13,10 +13,10 @@
 붉은색↔푸른색 발산이라 그대로 회색조로 낮추면 양끝 명도가 비슷해져 구별이
 사라지므로, 명도를 단조로 다시 깐다.
 
-**시점.** `PITCH` 가 클수록 위에서 내려다본다(2D 가 90°). 목업 기본값 25° 는
-거의 옆에서 보는 각이라 지면 그림으로는 층 구조가 안 읽힌다. 여기서는 올려
-잡는다. PRESETS 를 페이지 위에서 바꾼 뒤 3D 버튼을 누르면 적용된다 —
-setMode 가 그때 PRESETS 를 복사하기 때문이다.
+**시점.** 목업의 3D 기본 부감각을 48°(스카이뷰)로 올려두었으므로 여기서는
+덮지 않는다(`PITCH = None`). 화면과 지면 그림이 같은 각을 써야 한다. 굳이
+다른 각으로 찍고 싶을 때만 PITCH 에 값을 준다 — PRESETS 를 페이지 위에서
+바꾼 뒤 3D 버튼을 누르면 적용된다(setMode 가 그때 복사한다).
 
     python tools/capture_mockup.py
     python tools/make_figures_extra.py     # → fig_3d.png
@@ -37,7 +37,7 @@ SHOTS = [("2d", FIGDIR / "_mockup_2d.png"),
 PORT = 8793
 
 GRAYSCALE = False       # 이 그림만 컬러를 허용한다
-PITCH = 58              # 클수록 위에서 본다. 목업 기본은 25
+PITCH = None            # None 이면 목업 PRESETS 기본값을 그대로 쓴다
 
 # 어두울수록 못 보는 곳. 명도를 단조로 깐다. GRAYSCALE 일 때만 쓴다.
 GRAY_STOPS = {
@@ -132,9 +132,12 @@ def main():
                 page.route("**/tokens.css", route_tokens)
             page.goto(f"http://127.0.0.1:{PORT}/index.html")
             page.wait_for_selector("canvas", timeout=30000)
-            # 버튼을 누르기 전에 기준각을 바꾼다. setMode 가 이때 복사한다.
-            page.evaluate("(p) => { window.CoverageViewer.PRESETS['3d'].pitch = p; }",
-                          PITCH)
+            # PITCH 를 주면 버튼을 누르기 전에 기준각을 덮는다. 기본은 None 이라
+            # 목업 화면과 그림이 같은 각을 쓴다 — 갈리면 둘이 달라 보인다.
+            if PITCH is not None:
+                page.evaluate(
+                    "(p) => { window.CoverageViewer.PRESETS['3d'].pitch = p; }",
+                    PITCH)
             for mode, path in SHOTS:
                 page.click(f'button[data-m="{mode}"]')
                 page.wait_for_timeout(1500)   # 캔버스가 한 프레임 더 돌 시간

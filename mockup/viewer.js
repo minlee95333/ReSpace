@@ -46,7 +46,12 @@
     // 뭉쳐 보여 과장이 필요했다. 데이터가 어느 쪽인지 보고 정한다.
     '2d':   { yaw: 0,  pitch: 90, persp: false, orbit: false, single: true,  zx: 1 },
     '2.5d': { yaw: 45, pitch: 30, persp: false, orbit: false, single: false, zx: 1.15 },
-    '3d':   { yaw: 35, pitch: 25, persp: true,  orbit: true,  single: false, zx: 1.0 },
+    // pitch 는 클수록 위에서 내려다본다(2D 가 90). 25 는 거의 눈높이라 층이
+    // 쌓인 현장이 아래에서 올려다보는 것처럼 읽혔다. 스카이뷰로 올린다.
+    // perspK 는 시점 거리 배수다. 클수록 원근이 약해 평행에 가까워진다.
+    // 1.6 이면 사다리꼴이 심해 현장 한쪽 끝이 과장된다.
+    '3d':   { yaw: 35, pitch: 48, persp: true,  orbit: true,  single: false,
+              zx: 1.0, perspK: 3.2 },
   };
 
   /* 색은 theme.js 한 곳에서만 나온다. 종전에는 이 함수가 index.html 에도
@@ -182,7 +187,7 @@
 
       let sx = rx, sy2 = sy;
       if (this.cam.persp) {
-        const dist = Math.max(S.width_m, S.depth_m) * 1.6;
+        const dist = Math.max(S.width_m, S.depth_m) * (this.cam.perspK || 1.6);
         const k = dist / (dist + depth);
         sx *= k; sy2 *= k;
       }
@@ -562,7 +567,7 @@
       const zx = this.cam.zx || 1;
       const cx = S.width_m / 2, cy = S.depth_m / 2, pz0 = this._pivotZ || 0;
       const persp = this.cam.persp;
-      const dist = Math.max(S.width_m, S.depth_m) * 1.6;
+      const dist = Math.max(S.width_m, S.depth_m) * (this.cam.perspK || 1.6);
       const step = S.voxel_m;
 
       // 꼭짓점 오프셋 (투영 평면 기준, 원근 전)
