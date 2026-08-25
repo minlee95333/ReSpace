@@ -1,0 +1,107 @@
+{
+ "note": "가림축을 만드는 자유 파라미터 셋에 대한 민감도. ΔWDR 의 부호가 유지되는지가 판정 기준이다",
+ "baseline": {
+  "WDR_geometric": 0.6682,
+  "WDR_probabilistic": 0.6996,
+  "delta_WDR": 0.0314,
+  "geometric_dori_level": "observation"
+ },
+ "stripe_period_lambda": [
+  {
+   "case": "기본 (div 24)",
+   "lambda": 4.2007,
+   "section_normalized": null,
+   "WDR_geometric": 0.6682,
+   "WDR_probabilistic": 0.6996,
+   "fail_geometric": 334,
+   "fail_probabilistic": 168,
+   "delta_WDR": 0.0314
+  },
+  {
+   "case": "div 12",
+   "lambda": 2.9688,
+   "section_normalized": [
+    1.0,
+    0.7041,
+    0.4623,
+    0.2593,
+    0.1103,
+    0.0167
+   ],
+   "WDR_geometric": 0.7687,
+   "WDR_probabilistic": 0.8022,
+   "fail_geometric": 138,
+   "fail_probabilistic": 157,
+   "delta_WDR": 0.0335
+  },
+  {
+   "case": "div 48",
+   "lambda": 7.5427,
+   "section_normalized": [
+    1.0,
+    0.3559,
+    0.0472,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "WDR_geometric": 0.486,
+   "WDR_probabilistic": 0.5109,
+   "fail_geometric": 566,
+   "fail_probabilistic": 513,
+   "delta_WDR": 0.0249
+  }
+ ],
+ "scaffold_coverage": [
+  {
+   "scaffold_coverage": 0.2,
+   "WDR_geometric": 0.8053,
+   "WDR_probabilistic": 0.8409,
+   "fail_geometric": 138,
+   "fail_probabilistic": 148,
+   "delta_WDR": 0.0356
+  },
+  {
+   "scaffold_coverage": 0.35,
+   "WDR_geometric": 0.6682,
+   "WDR_probabilistic": 0.6996,
+   "fail_geometric": 334,
+   "fail_probabilistic": 168,
+   "delta_WDR": 0.0314
+  },
+  {
+   "scaffold_coverage": 0.5,
+   "WDR_geometric": 0.5558,
+   "WDR_probabilistic": 0.5824,
+   "fail_geometric": 564,
+   "fail_probabilistic": 526,
+   "delta_WDR": 0.0266
+  }
+ ],
+ "threshold": [
+  {
+   "threshold": 0.4,
+   "fail_geometric": 238,
+   "fail_probabilistic": 132,
+   "reduction": 106
+  },
+  {
+   "threshold": 0.5,
+   "fail_geometric": 334,
+   "fail_probabilistic": 168,
+   "reduction": 166
+  },
+  {
+   "threshold": 0.6,
+   "fail_geometric": 458,
+   "fail_probabilistic": 394,
+   "reduction": 64
+  }
+ ],
+ "delta_WDR_range": [
+  0.0249,
+  0.0356
+ ],
+ "sign_preserved": true,
+ "status": "ok"
+}
