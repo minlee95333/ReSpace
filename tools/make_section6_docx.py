@@ -28,18 +28,26 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "docs" / "제안서_6장_연구상세내용.md"
-OUT = ROOT / "outputs" / "제안서_6장_0825.docx"
+
+# 압축 모드 — 제출 분량(5쪽)에 맞춘 판면. 원본 마크다운이 다르다.
+COMPACT = "--compact" in sys.argv
+SRC = ROOT / "docs" / ("제안서_6장_압축본.md" if COMPACT
+                       else "제안서_6장_연구상세내용.md")
+OUT = ROOT / "outputs" / ("제안서_6장_압축_0825.docx" if COMPACT
+                          else "제안서_6장_0825.docx")
 
 FONT = "맑은 고딕"
-BODY = 10.0
+BODY = 8.6 if COMPACT else 10.0
+LEAD = 1.16 if COMPACT else 1.35          # 줄간격
+GAP = 3 if COMPACT else 7                 # 문단 뒤 여백(pt)
+MARGIN_CM = 1.7 if COMPACT else 2.5
 INK = RGBColor(0x1E, 0x22, 0x28)
 MUTED = RGBColor(0x5C, 0x65, 0x70)
 ACCENT = RGBColor(0x14, 0x4E, 0x8C)
 RULE = "D8DCE0"
 HEAD_BG = "EEF1F4"
 
-BODY_W_CM = 16.0          # A4 210mm - 좌우 여백 25mm 씩
+BODY_W_CM = 21.0 - 2 * MARGIN_CM   # A4 210mm - 좌우 여백
 
 # 맑은 고딕에 없는 글자 → 있는 글자로
 FIXUP = {
@@ -63,8 +71,8 @@ def set_base(doc):
     st.font.size = Pt(BODY)
     st.element.rPr.rFonts.set(qn("w:eastAsia"), FONT)
     for s in doc.sections:
-        s.top_margin = s.bottom_margin = Cm(2.2)
-        s.left_margin = s.right_margin = Cm(2.5)
+        s.top_margin = s.bottom_margin = Cm(MARGIN_CM)
+        s.left_margin = s.right_margin = Cm(MARGIN_CM)
 
 
 def _run(p, text, size=BODY, bold=False, color=INK, italic=False, mono=False):
@@ -97,12 +105,12 @@ def inline(p, text, size=BODY, color=INK, base_bold=False):
             _run(p, tok, size, base_bold, color)
 
 
-def para(doc, text="", size=BODY, color=INK, after=7, before=0,
+def para(doc, text="", size=BODY, color=INK, after=GAP, before=0,
          indent=0.0, align=None, bold=False):
     p = doc.add_paragraph()
     pf = p.paragraph_format
     pf.space_after, pf.space_before = Pt(after), Pt(before)
-    pf.line_spacing = 1.35
+    pf.line_spacing = LEAD
     if indent:
         pf.left_indent = Cm(indent)
     if align is not None:
@@ -152,9 +160,9 @@ def render_table(doc, rows):
         for i, (c, v) in enumerate(zip(cells, values)):
             c.paragraphs[0].clear() if False else None
             p = c.paragraphs[0]
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(2)
-            p.paragraph_format.line_spacing = 1.2
+            p.paragraph_format.space_before = Pt(0.5 if COMPACT else 2)
+            p.paragraph_format.space_after = Pt(0.5 if COMPACT else 2)
+            p.paragraph_format.line_spacing = 1.06 if COMPACT else 1.2
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER if is_head else aligns[i]
             inline(p, v.strip(), size=BODY - 0.5, base_bold=is_head)
             if is_head:
@@ -168,7 +176,27 @@ def render_table(doc, rows):
     return t
 
 
-FIGRE = re.compile(r"<그림 자리>\s*\*\*(.+?)\*\*\s*(?:\(`(.+?)`(?:,\s*`(.+?)`)?\))?")
+FIGRE = re.compile(
+    r"<그림 (?:자리|2단)>\s*\*\*(.+?)\*\*\s*(?:\(`(.+?)`(?:,\s*`(.+?)`)?\))?")
+
+
+def two_up(doc, paths, caption):
+    """그림 둘을 나란히. 테두리 없는 1x2 표를 자로 쓴다."""
+    t = doc.add_table(rows=1, cols=2)
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    w = (BODY_W_CM - 0.5) / 2
+    for cell, rel in zip(t.rows[0].cells, paths):
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_after = Pt(0)
+        f = ROOT / rel
+        if f.exists():
+            p.add_run().add_picture(str(f), width=Cm(w))
+        else:
+            inline(p, f"[그림 없음: {rel}]")
+    para(doc, caption, size=BODY - 0.4, color=MUTED,
+         align=WD_ALIGN_PARAGRAPH.CENTER, after=GAP + 2, before=2)
 
 
 def render_figure(doc, line, tail):
@@ -178,6 +206,9 @@ def render_figure(doc, line, tail):
         return
     caption, *paths = m.groups()
     paths = [p for p in paths if p]
+    if line.strip().startswith("<그림 2단>") and len(paths) == 2:
+        two_up(doc, paths, caption)
+        return
     for rel in paths:
         f = ROOT / rel
         if not f.exists():
@@ -187,7 +218,9 @@ def render_figure(doc, line, tail):
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.space_before = Pt(6)
         p.paragraph_format.space_after = Pt(3)
-        w = BODY_W_CM if not f.name.startswith("eq_") else min(BODY_W_CM, 11.0)
+        # 압축 모드에서는 그림을 판면보다 좁게 — 세로가 줄어 쪽수가 준다
+        full = BODY_W_CM * (0.80 if COMPACT else 1.0)
+        w = full if not f.name.startswith("eq_") else min(full, 11.0)
         p.add_run().add_picture(str(f), width=Cm(w))
     cap = para(doc, caption, size=BODY - 0.5, color=MUTED,
                align=WD_ALIGN_PARAGRAPH.CENTER, after=4)
@@ -226,12 +259,12 @@ def render(doc, lines):
             continue
 
         # 그림 자리
-        if s.startswith("<그림 자리>"):
+        if s.startswith("<그림 자리>") or s.startswith("<그림 2단>"):
             tail = ""
             j = i + 1
             if j < n and lines[j].strip().startswith("—"):
                 while (j < n and lines[j].strip()
-                       and not lines[j].startswith("<그림 자리>")):
+                       and not lines[j].lstrip().startswith("<그림")):
                     tail += (" " if tail else "") + lines[j].strip().lstrip("— ")
                     j += 1
             render_figure(doc, s, tail)
@@ -267,12 +300,12 @@ def render(doc, lines):
         # 제목
         if s.startswith("### "):
             para(doc, s[4:], size=BODY + 0.5, color=ACCENT, bold=True,
-                 before=10, after=4)
+                 before=7 if COMPACT else 10, after=3 if COMPACT else 4)
             i += 1
             continue
         if s.startswith("## "):
-            para(doc, s[3:], size=BODY + 3.0, color=INK, bold=True,
-                 before=16, after=6)
+            para(doc, s[3:], size=BODY + (2.2 if COMPACT else 3.0), color=INK, bold=True,
+                 before=11 if COMPACT else 16, after=4 if COMPACT else 6)
             i += 1
             continue
         if s.startswith("# "):
@@ -295,7 +328,7 @@ def render(doc, lines):
             pf.left_indent = Cm(0.55 + 0.5 * depth)
             pf.first_line_indent = Cm(-0.35)
             pf.space_after = Pt(4)
-            pf.line_spacing = 1.35
+            pf.line_spacing = LEAD
             _run(p, "• ", color=MUTED)
             inline(p, body)
             i = j
@@ -314,7 +347,7 @@ def render(doc, lines):
             pf.left_indent = Cm(0.7)
             pf.first_line_indent = Cm(-0.7)
             pf.space_after = Pt(4)
-            pf.line_spacing = 1.35
+            pf.line_spacing = LEAD
             _run(p, f"{m.group(1)}. ", bold=True, color=ACCENT)
             inline(p, body)
             i = j
@@ -329,7 +362,7 @@ def render(doc, lines):
         buf = [s.strip()]
         j = i + 1
         while j < n and lines[j].strip() and not re.match(
-                r"^(\||>|#|-\s|\d+\.\s|```|---|<그림 자리>)", lines[j].lstrip()):
+                r"^(\||>|#|-\s|\d+\.\s|```|---|<그림 )", lines[j].lstrip()):
             buf.append(lines[j].strip())
             j += 1
         text = " ".join(buf)
@@ -355,11 +388,23 @@ def main():
 
     doc = Document()
     set_base(doc)
-    para(doc, lines[0].lstrip("# "), size=BODY + 7.0, bold=True, after=2)
-    para(doc, "제17회 LH 국토기술대전 공모 제안서 · 초안 2026-08-25",
+    para(doc, lines[0].lstrip("# "), size=BODY + (5.4 if COMPACT else 7.0),
+         bold=True, after=2)
+    para(doc, "제17회 LH 국토기술대전 공모 제안서 · 초안 2026-08-25"
+         + (" · 제출 압축본" if COMPACT else ""),
          size=BODY - 0.5, color=MUTED, after=14)
     bar(doc)
     render(doc, lines[start:])
+
+    # 표 뒤에 넣는 빈 문단이 끝에 남으면 워드가 쪽을 하나 더 센다
+    body = doc.element.body
+    for el in list(body)[::-1]:
+        if el.tag.endswith("}p") and not "".join(el.itertext()).strip():
+            body.remove(el)
+        elif el.tag.endswith("}sectPr"):
+            continue
+        else:
+            break
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(OUT)
