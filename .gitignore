@@ -60,3 +60,5 @@ build/
 
 # 선행연구 원문 PDF — 출판사 저작물이므로 올리지 않는다 (README.md 는 유지)
 docs/reference/papers/*.pdf
+# 본문 추출 텍스트도 같은 이유로 제외한다
+docs/reference/papers/_*.txt
