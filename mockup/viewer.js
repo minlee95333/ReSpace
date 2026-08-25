@@ -46,11 +46,14 @@
     // 뭉쳐 보여 과장이 필요했다. 데이터가 어느 쪽인지 보고 정한다.
     '2d':   { yaw: 0,  pitch: 90, persp: false, orbit: false, single: true,  zx: 1 },
     '2.5d': { yaw: 45, pitch: 30, persp: false, orbit: false, single: false, zx: 1.15 },
-    // pitch 는 클수록 위에서 내려다본다(2D 가 90). 25 는 거의 눈높이라 층이
-    // 쌓인 현장이 아래에서 올려다보는 것처럼 읽혔다. 스카이뷰로 올린다.
-    // perspK 는 시점 거리 배수다. 클수록 원근이 약해 평행에 가까워진다.
-    // 1.6 이면 사다리꼴이 심해 현장 한쪽 끝이 과장된다.
-    '3d':   { yaw: 35, pitch: 48, persp: true,  orbit: true,  single: false,
+    // pitch 는 클수록 위에서 내려다본다(2D 가 90). 45 = 스카이뷰.
+    //
+    // **원근을 끈다(persp: false).** 이게 핵심이다. 부감각을 48 로 올려도
+    // 원근이 켜져 있으면 외곽 비계(높이 14m)의 안쪽 면이 벌어져 보여서
+    // "현장 안에서 올려다본" 그림으로 읽힌다. 실제로 그 지적을 두 번 받았다.
+    // 평행투영(축측)으로 바꾸면 그 착시가 사라지고 건축 배치도처럼 읽힌다.
+    // perspK 는 persp 가 true 일 때만 쓰인다 — 궤도 조작으로 켤 수 있어 남긴다.
+    '3d':   { yaw: 35, pitch: 45, persp: false, orbit: true,  single: false,
               zx: 1.0, perspK: 3.2 },
   };
 
