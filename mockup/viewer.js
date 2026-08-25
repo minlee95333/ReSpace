@@ -647,6 +647,25 @@
       const chromeInk = Theme.ui('--color-chrome');
       if (!(this.opts.showCams && d.cameras)) return;
       const chosen = new Set(this.opts.cameraIds || []);
+      /* 잔상 — 다른 배치에만 있는 자리. 점선 원으로만 남긴다.
+         **화살표로 잇지 않는다.** 탐욕은 카메라를 1:1 로 옮기는 것이 아니라
+         매번 처음부터 고르므로 "이 대가 저기로 갔다"는 대응이 없다. 선을
+         그으면 없는 대응을 지어내는 것이 된다. */
+      const ghost = new Set(this.opts.ghostCameraIds || []);
+      if (ghost.size) {
+        ctx.save();
+        ctx.setLineDash([3, 3]);
+        d.cameras.forEach(c => {
+          if (!ghost.has(c.id)) return;
+          const p = this._project(c.x, c.y, c.z);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
+          ctx.strokeStyle = rgba(chromeInk, 0.75);
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
       d.cameras.forEach(c => {
         const on = chosen.size === 0 || chosen.has(c.id);
         const p = this._project(c.x, c.y, c.z);

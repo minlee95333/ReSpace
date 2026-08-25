@@ -62,3 +62,6 @@ build/
 docs/reference/papers/*.pdf
 # 본문 추출 텍스트도 같은 이유로 제외한다
 docs/reference/papers/_*.txt
+
+# 워드 잠금 파일 — 문서를 열어두면 생긴다
+outputs/~$*

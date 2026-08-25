@@ -141,6 +141,14 @@ def main():
             for mode, path in SHOTS:
                 page.click(f'button[data-m="{mode}"]')
                 page.wait_for_timeout(1500)   # 캔버스가 한 프레임 더 돌 시간
+                # 잔상(다른 배치에만 있는 카메라 자리)은 화면에서는 범례가
+                # 뜻을 설명하지만, 지면 그림은 캔버스만 오려 가므로 설명이
+                # 따라가지 않는다. 뜻 없는 점선 원이 되므로 끄고 찍는다.
+                # VIEWER 는 index.html 의 최상위 let 이라 window 에 안 붙는다.
+                # 전역 렉시컬 스코프에는 있으므로 이름으로 바로 집는다.
+                page.evaluate("() => { if (typeof VIEWER !== 'undefined'"
+                              " && VIEWER) VIEWER.set('ghostCameraIds', []); }")
+                page.wait_for_timeout(400)
                 page.locator("canvas").first.screenshot(path=str(path))
             b.close()
     finally:

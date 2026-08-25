@@ -131,6 +131,30 @@ canvas{display:block;width:100%;height:100%;
 .seg button:hover{background:var(--color-paper-3);color:var(--color-ink)}
 .seg button[aria-pressed="true"]{background:var(--color-chrome);color:var(--color-paper-2);
   box-shadow:var(--inset)}
+/* 배치 전/후 탭 — 2D·3D 토글과 같은 급으로 보이면 안 된다. 이게 이 도구의
+ * 논증 축이고 저쪽은 표시 옵션이다. 크기·굵기·번호로 급을 갈라 준다. */
+.vtabs{display:inline-flex;gap:5px}
+.vtab{
+  border:var(--rule-hair) solid var(--color-rule);background:var(--color-paper-3);
+  border-radius:11px;padding:5px 12px;cursor:pointer;font:inherit;text-align:left;
+  line-height:1.15;color:var(--color-muted);box-shadow:var(--inset);
+  transition:background var(--dur-short) var(--ease-out),color var(--dur-short) var(--ease-out);
+}
+.vtab b{display:block;font-size:var(--text-xs);font-weight:600;letter-spacing:-.01em}
+.vtab i{display:block;font-size:var(--text-2xs);font-style:normal;opacity:.85}
+.vtab:hover{background:var(--color-paper-2);color:var(--color-ink-2)}
+.vtab[aria-pressed="true"]{background:var(--color-chrome);color:var(--color-paper-2);
+  border-color:var(--color-chrome);box-shadow:var(--raise-sm)}
+
+/* 델타 띠 — 어느 탭에 있든 양쪽 값을 같이 보인다. 탭을 왕복하며 기억으로
+ * 비교하게 두면 전후를 못 느낀다. */
+.delta{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;
+  padding:7px 12px;margin:0 8px;border-radius:10px;
+  background:var(--color-paper-3);border:var(--rule-hair) solid var(--color-rule);
+  font-size:var(--text-2xs);color:var(--color-muted)}
+.delta b{color:var(--color-ink);font-weight:600}
+.delta .arrow{color:var(--color-muted);padding:0 1px}
+.delta .gain{color:var(--color-ink);font-weight:600}
 label{font-size:var(--text-2xs);color:var(--color-ink-2);display:inline-flex;
       gap:5px;align-items:center;cursor:pointer}
 input[type=radio],input[type=checkbox]{accent-color:var(--color-chrome);margin:0}
@@ -168,6 +192,7 @@ tbody tr:hover{background:var(--color-paper-3)}
        font-variant-numeric:tabular-nums}
 
 /* ── 발 — 범례 ────────────────────────────────────────────────────── */
+.chip.ghost{background:none;border:1.2px dashed var(--color-muted);border-radius:50%}
 .foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
       font-size:var(--text-2xs);color:var(--color-muted);padding:0 4px;
       line-height:1.5}
@@ -221,19 +246,33 @@ function render(){
     .slice().sort((a,b)=> b.w-a.w || a.P_total-b.P_total);
   const rc = {}; fails.forEach(f=>rc[f.reason]=(rc[f.reason]||0)+1);
   const base = d.geometric_baseline, ps = d.dori_pair_stats;
+  /* 두 배치가 공유하는 카메라와 갈리는 카메라. 탐욕이 1:1 대응을 만들지
+     않으므로 "어느 대가 어디로 갔다"는 말은 못 한다 — 빠진 자리와 새 자리를
+     각각 셀 뿐이다. */
+  /* 분모는 전체 복셀이 아니라 **작업자가 설 수 있는 칸**이다. 공중이나 구조체
+     내부를 분모에 넣으면 미달률이 부풀려진다. */
+  const nOcc = d.voxels.reduce((n,v)=> n + (v.occupiable===false?0:1), 0);
+  const gi = (geo&&geo.camera_ids)||[], ei = (emp&&emp.camera_ids)||[];
+  const kept = gi.filter(x=>ei.includes(x)).length;
+  const moved = ei.length - kept;
+  /* 잔상 — 지금 보는 배치에는 없고 다른 배치에만 있는 카메라 자리 */
+  const other = view==='empirical' ? gi : (view==='geometric' ? ei : []);
+  const ghosts = other.filter(x=>!((shown.camera_ids)||[]).includes(x));
 
   document.getElementById('app').innerHTML = `
   <div class="top">
     <div class="brand">
       <h1>AI CCTV 배치 적정성 평가</h1>
-      <p>위험가중 안전모 검출률(WDR) · 같은 ${d.camera_budget}대를 같은 자로 측정</p>
+      <p>위험가중 안전모 검출률(WDR) · 같은 ${d.camera_budget}대를 같은 자로 측정
+        · 작업자 활동공간 ${nOcc.toLocaleString()}칸</p>
     </div>
     <div class="kpis">
-      <div class="kpi"><div class="k">① 기하 커버리지</div><div class="v">${geo?pct(geo.WDR):'—'}</div></div>
-      <div class="kpi"><div class="k">② 가정 곡선</div><div class="v">${asm?pct(asm.WDR):'—'}</div></div>
-      <div class="kpi hi"><div class="k">③ 실측 곡선 — 제안</div><div class="v">${emp?pct(emp.WDR):'—'}</div></div>
-      <div class="kpi hi"><div class="k">미달구역</div>
-        <div class="v">${geo&&emp?geo.fail_voxel_count.toLocaleString()+' → '+emp.fail_voxel_count.toLocaleString():'—'}</div></div>
+      <div class="kpi hi"><div class="k">검출 임계 미달</div>
+        <div class="v">${emp&&nOcc?pct(emp.fail_voxel_count/nOcc):'—'}</div></div>
+      <div class="kpi"><div class="k">① 현재 배치</div><div class="v">${geo?pct(geo.WDR):'—'}</div></div>
+      <div class="kpi"><div class="k">② 제안 배치</div><div class="v">${emp?pct(emp.WDR):'—'}</div></div>
+      <div class="kpi hi"><div class="k">개선폭</div>
+        <div class="v">${geo&&emp?((emp.WDR-geo.WDR>=0?'+':'')+((emp.WDR-geo.WDR)*100).toFixed(1)+'%p'):'—'}</div></div>
     </div>
   </div>
 
@@ -241,10 +280,11 @@ function render(){
     <div class="panel">
       <div class="head">
         <h2>현장 검출확률</h2>
-        <span class="seg" id="segview">
-          <button data-v="geometric" aria-pressed="${view==='geometric'}">기하</button>
-          <button data-v="assumed" aria-pressed="${view==='assumed'}">가정</button>
-          <button data-v="empirical" aria-pressed="${view==='empirical'}">실측</button>
+        <span class="vtabs" id="segview">
+          <button class="vtab" data-v="geometric" aria-pressed="${view==='geometric'}"
+            ><b>① 현재 배치</b><i>기하 커버리지</i></button>
+          <button class="vtab" data-v="empirical" aria-pressed="${view==='empirical'}"
+            ><b>② 제안 배치</b><i>검출확률 기준</i></button>
         </span>
         <span class="seg" id="segmode">
           <button data-m="2d" aria-pressed="${MODE==='2d'}">2D</button>
@@ -253,6 +293,14 @@ function render(){
         </span>
         <label><input type="checkbox" id="solids" checked> 골조</label>
       </div>
+      ${geo&&emp?`<div class="delta">
+        <span>WDR <b>${pct(geo.WDR)}</b><span class="arrow"> → </span><b>${pct(emp.WDR)}</b>
+          <span class="gain">(${(emp.WDR-geo.WDR>=0?'+':'')+((emp.WDR-geo.WDR)*100).toFixed(1)}%p)</span></span>
+        <span>미달 <b>${geo.fail_voxel_count.toLocaleString()}</b><span class="arrow"> → </span
+          ><b>${emp.fail_voxel_count.toLocaleString()}</b></span>
+        <span>카메라 ${d.camera_budget}대 중 <b>${moved}대 이동</b>
+          (${kept}대 제자리)</span>
+      </div>`:''}
       <div class="canvaswrap"><canvas id="map" role="img"
         aria-label="복셀별 검출확률 히트맵. 수치는 오른쪽 미달구역 탭에 있다"></canvas></div>
     </div>
@@ -272,7 +320,8 @@ function render(){
             <dt>복셀</dt><dd>${d.site.voxel_m} m · ${d.voxels.length.toLocaleString()}개</dd>
             <dt>카메라</dt><dd>후보 ${d.cameras.length} · 선정 ${d.camera_budget}</dd>
             <dt>판정 임계</dt><dd>P_total &lt; ${d.threshold}</dd>
-            <dt>곡선 R²</dt><dd>${d.curve.r2_full_grid}</dd>
+            <dt>곡선 R²</dt><dd>${d.curve.r2_rho_native ?? d.curve.r2_full_grid ?? '—'}
+              <span style="color:var(--color-muted)">(ρ축 실측)</span></dd>
             <dt>ρ 실측 범위</dt><dd>${d.curve.rho_measured_px[0]}–${d.curve.rho_measured_px[1]} px</dd>
           </dl>
           <p style="margin:12px 0 0;font-size:var(--text-2xs);color:var(--color-muted);line-height:1.6">
@@ -343,21 +392,23 @@ function render(){
     <span><span class="chip fail"></span>P&lt;${d.threshold}</span>
     <span><span class="chip mid"></span>${d.threshold}~${Theme.CLEAR_AT}</span>
     <span><span class="chip clear"></span>${Theme.CLEAR_AT} 이상 윤곽만</span>
+    <span><span class="chip ghost"></span>다른 배치에만 있는 카메라 자리</span>
     <span style="margin-left:auto">기하 기준선 ${base?base.level:'—'} ·
       복셀 ${d.site.voxel_m}m · ${d.voxels.length.toLocaleString()}개</span>
   </div>`;
 
-  mountMap(view, key);
+  mountMap(view, ghosts);
   wire();
 }
 
-function mountMap(view){
+function mountMap(view, ghosts){
   const cv = document.getElementById('map');
   const box = cv.parentElement.getBoundingClientRect();
   cv.style.height = Math.max(180, box.height - 16) + 'px';
   VIEWER = new CoverageViewer.Viewer(cv, D, {
     mode: MODE, level: 0, key: 'P_total_' + view,
     cameraIds: (D.placements[view]||{}).camera_ids || [],
+    ghostCameraIds: ghosts || [],
   });
   VIEWER.setMode(MODE);
 }
