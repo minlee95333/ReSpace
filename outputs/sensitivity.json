@@ -1,9 +1,9 @@
 {
  "note": "가림축을 만드는 자유 파라미터 셋에 대한 민감도. ΔWDR 의 부호가 유지되는지가 판정 기준이다",
  "baseline": {
-  "WDR_geometric": 0.6682,
-  "WDR_probabilistic": 0.6996,
-  "delta_WDR": 0.0314,
+  "WDR_geometric": 0.4252,
+  "WDR_probabilistic": 0.448,
+  "delta_WDR": 0.0228,
   "geometric_dori_level": "observation"
  },
  "stripe_period_lambda": [
@@ -11,11 +11,11 @@
    "case": "기본 (div 24)",
    "lambda": 4.2007,
    "section_normalized": null,
-   "WDR_geometric": 0.6682,
-   "WDR_probabilistic": 0.6996,
-   "fail_geometric": 334,
-   "fail_probabilistic": 168,
-   "delta_WDR": 0.0314
+   "WDR_geometric": 0.4252,
+   "WDR_probabilistic": 0.448,
+   "fail_geometric": 25111,
+   "fail_probabilistic": 24704,
+   "delta_WDR": 0.0228
   },
   {
    "case": "div 12",
@@ -28,11 +28,11 @@
     0.1103,
     0.0167
    ],
-   "WDR_geometric": 0.7687,
-   "WDR_probabilistic": 0.8022,
-   "fail_geometric": 138,
-   "fail_probabilistic": 157,
-   "delta_WDR": 0.0335
+   "WDR_geometric": 0.5491,
+   "WDR_probabilistic": 0.574,
+   "fail_geometric": 13637,
+   "fail_probabilistic": 8936,
+   "delta_WDR": 0.0249
   },
   {
    "case": "div 48",
@@ -45,62 +45,65 @@
     0.0,
     0.0
    ],
-   "WDR_geometric": 0.486,
-   "WDR_probabilistic": 0.5109,
-   "fail_geometric": 566,
-   "fail_probabilistic": 513,
-   "delta_WDR": 0.0249
+   "WDR_geometric": 0.2365,
+   "WDR_probabilistic": 0.2515,
+   "fail_geometric": 25111,
+   "fail_probabilistic": 24513,
+   "delta_WDR": 0.015
   }
  ],
  "scaffold_coverage": [
   {
    "scaffold_coverage": 0.2,
-   "WDR_geometric": 0.8053,
-   "WDR_probabilistic": 0.8409,
-   "fail_geometric": 138,
-   "fail_probabilistic": 148,
-   "delta_WDR": 0.0356
+   "WDR_geometric": 0.6071,
+   "WDR_probabilistic": 0.6324,
+   "fail_geometric": 6347,
+   "fail_probabilistic": 6742,
+   "delta_WDR": 0.0253
   },
   {
    "scaffold_coverage": 0.35,
-   "WDR_geometric": 0.6682,
-   "WDR_probabilistic": 0.6996,
-   "fail_geometric": 334,
-   "fail_probabilistic": 168,
-   "delta_WDR": 0.0314
+   "WDR_geometric": 0.4252,
+   "WDR_probabilistic": 0.448,
+   "fail_geometric": 25111,
+   "fail_probabilistic": 24704,
+   "delta_WDR": 0.0228
   },
   {
    "scaffold_coverage": 0.5,
-   "WDR_geometric": 0.5558,
-   "WDR_probabilistic": 0.5824,
-   "fail_geometric": 564,
-   "fail_probabilistic": 526,
-   "delta_WDR": 0.0266
+   "WDR_geometric": 0.3035,
+   "WDR_probabilistic": 0.3202,
+   "fail_geometric": 25111,
+   "fail_probabilistic": 24429,
+   "delta_WDR": 0.0167
   }
  ],
  "threshold": [
   {
    "threshold": 0.4,
-   "fail_geometric": 238,
-   "fail_probabilistic": 132,
-   "reduction": 106
+   "fail_geometric": 18880,
+   "fail_probabilistic": 16956,
+   "reduction": 1924,
+   "n_occupiable": 36348
   },
   {
    "threshold": 0.5,
-   "fail_geometric": 334,
-   "fail_probabilistic": 168,
-   "reduction": 166
+   "fail_geometric": 25111,
+   "fail_probabilistic": 24704,
+   "reduction": 407,
+   "n_occupiable": 36348
   },
   {
    "threshold": 0.6,
-   "fail_geometric": 458,
-   "fail_probabilistic": 394,
-   "reduction": 64
+   "fail_geometric": 25134,
+   "fail_probabilistic": 25408,
+   "reduction": -274,
+   "n_occupiable": 36348
   }
  ],
  "delta_WDR_range": [
-  0.0249,
-  0.0356
+  0.015,
+  0.0253
  ],
  "sign_preserved": true,
  "status": "ok"

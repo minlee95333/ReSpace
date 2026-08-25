@@ -1,0 +1,146 @@
+{
+ "model": "separable_multiplicative",
+ "aggregate": "min",
+ "aggregate_note": "항목별 곡선의 **최솟값**을 종합 검출확률로 쓴다. 평균으로 바꾸지 말 것 (ADDENDUM-01 §5.3)",
+ "targets": [
+  "helmet_nohat",
+  "helmet_worn"
+ ],
+ "primary": "helmet_nohat",
+ "per_target": {
+  "helmet_nohat": {
+   "model": "separable_multiplicative",
+   "target": "recall_nohat",
+   "detector": "yolov8n",
+   "detector_weights": "runs/detect/shwd_yolov8n/weights/best.pt",
+   "detector_note": "COCO 사전학습본이 아니라 SHWD train 분할로 파인튜닝한 가중치다",
+   "f_rho": {
+    "form": "logistic",
+    "L": 0.9374244695675447,
+    "k": 0.7385374802504736,
+    "x0": 5.7309155916551955,
+    "r2_section": 0.9907,
+    "measured_range_px": [
+     4.0,
+     48.0
+    ],
+    "extrapolation": "measured_range 밖으로 외삽하지 않는다. 하한 미만은 detect_model.py 가 0 으로 본다"
+   },
+   "g_theta": {
+    "form": "logistic",
+    "params": {
+     "k": 0.24196737120562176,
+     "x0": 61.35766052166504
+    },
+    "normalized_at": "theta=0",
+    "r2_section": 0.9973,
+    "r2_candidates": {
+     "quadratic": 0.8586,
+     "exponential": 0.5125,
+     "logistic": 0.9973
+    },
+    "measured_range_deg": [
+     0.0,
+     75.0
+    ],
+    "extrapolation": "measured_range 밖으로 외삽하지 않는다. 상한 초과는 detect_model.py 가 0 으로 본다"
+   },
+   "h_occ": {
+    "form": "exp_decay",
+    "lambda": 4.200734437482722,
+    "normalized_at": "occ=0",
+    "input": "occ_pct_box/100",
+    "r2_section": 0.9467,
+    "measured_range": [
+     0.0,
+     0.7501000000000001
+    ],
+    "extrapolation": "measured_range 밖으로 외삽하지 않는다. 상한 초과는 detect_model.py 가 0 으로 본다"
+   },
+   "baseline_P": 0.9374,
+   "r2_full_grid": 0.8977,
+   "r2_acceptance": 0.8,
+   "acceptance_passed": true,
+   "n_conditions": 288,
+   "n_images": null,
+   "iou_thr": 0.5,
+   "conf_thr": 0.25,
+   "status": "ok",
+   "generated_at": null
+  },
+  "helmet_worn": {
+   "model": "separable_multiplicative",
+   "target": "recall_hat",
+   "detector": "yolov8n",
+   "detector_weights": "runs/detect/shwd_yolov8n/weights/best.pt",
+   "detector_note": "COCO 사전학습본이 아니라 SHWD train 분할로 파인튜닝한 가중치다",
+   "f_rho": {
+    "form": "logistic",
+    "L": 0.9466707229262675,
+    "k": 0.48023757539254636,
+    "x0": 5.717828589336363,
+    "r2_section": 0.9911,
+    "measured_range_px": [
+     4.0,
+     48.0
+    ],
+    "extrapolation": "measured_range 밖으로 외삽하지 않는다. 하한 미만은 detect_model.py 가 0 으로 본다"
+   },
+   "g_theta": {
+    "form": "logistic",
+    "params": {
+     "k": 0.2967604547222111,
+     "x0": 64.0837291576274
+    },
+    "normalized_at": "theta=0",
+    "r2_section": 0.9998,
+    "r2_candidates": {
+     "quadratic": 0.7481,
+     "exponential": 0.4237,
+     "logistic": 0.9998
+    },
+    "measured_range_deg": [
+     0.0,
+     75.0
+    ],
+    "extrapolation": "measured_range 밖으로 외삽하지 않는다. 상한 초과는 detect_model.py 가 0 으로 본다"
+   },
+   "h_occ": {
+    "form": "exp_decay",
+    "lambda": 2.914304036317009,
+    "normalized_at": "occ=0",
+    "input": "occ_pct_box/100",
+    "r2_section": 0.9373,
+    "measured_range": [
+     0.0,
+     0.7501000000000001
+    ],
+    "extrapolation": "measured_range 밖으로 외삽하지 않는다. 상한 초과는 detect_model.py 가 0 으로 본다"
+   },
+   "baseline_P": 0.9467,
+   "r2_full_grid": 0.8308,
+   "r2_acceptance": 0.8,
+   "acceptance_passed": true,
+   "n_conditions": 288,
+   "n_images": null,
+   "iou_thr": 0.5,
+   "conf_thr": 0.25,
+   "status": "ok",
+   "generated_at": null
+  }
+ },
+ "targets_note": "부록 §5.3 은 4항목(person/helmet/pose-fallen/pose-gesture)을 요구하나 SHWD 에 자세 라벨이 없다. 지금 데이터로 가능한 2항목을 구현했다. 항목을 늘리는 것은 곡선을 더 얹는 것뿐이므로 구조는 그대로 확장된다",
+ "detector": "yolov8n",
+ "detector_weights": "runs/detect/shwd_yolov8n/weights/best.pt",
+ "detector_note": "COCO 사전학습본이 아니라 SHWD train 분할로 파인튜닝한 가중치다",
+ "r2_full_grid": 0.8308,
+ "r2_primary": 0.8977,
+ "r2_acceptance": 0.8,
+ "acceptance_passed": true,
+ "n_conditions": 288,
+ "n_images": 500,
+ "iou_thr": 0.5,
+ "conf_thr": 0.25,
+ "status": "ok",
+ "generated_at": "2026-08-21T23:41:14"
+}

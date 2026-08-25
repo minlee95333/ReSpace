@@ -154,14 +154,27 @@ def build(plan_path: Path) -> dict:
             "detector": curve.p.get("detector"),
             "detector_weights": curve.p.get("detector_weights"),
             "curve": str(config.CURVE_PARAMS_JSON.relative_to(config.ROOT)),
+            # r2_full_grid 는 **항목별 최솟값**이다(fit_curve.py). 보수적 대표값이라
+            # 그것만 실으면 주 지표의 설명력을 실제보다 낮게 보고하게 된다.
+            # 판정에 쓰이는 곡선은 미착용(주 지표) 쪽이므로 둘을 같이 싣는다.
             "r2_full_grid": curve.p.get("r2_full_grid"),
+            "r2_primary": curve.p.get("r2_primary"),
+            "r2_rho_native": curve.p.get("r2_rho_native"),
+            "f_rho_source": curve.p.get("f_rho_source"),
+            "g_theta_h_occ_source": curve.p.get("g_theta_h_occ_source"),
             "rho_measured_px": curve.p["f_rho"]["measured_range_px"],
             "camera_spec": {"img_w": config.IMG_WIDTH_PX,
                             "img_h": config.IMG_HEIGHT_PX,
                             "hfov_deg": config.HFOV_DEG},
             "limits": [
-                "곡선은 SHWD 정지영상의 합성 변형에서 얻었다. 합성 가림(수직 "
+                "ρ(픽셀밀도) 축은 GDUT-HWD 실사진의 실제 머리 크기로 쟀다. "
+                "θ·o 축은 SHWD 정지영상의 합성 변형에서 얻었고, 합성 가림(수직 "
                 "스트라이프)과 실제 비계 가림의 등가성은 검증되지 않았다",
+                "θ·o 는 ρ=48px 단면에서 쟀다. 작은 머리에서의 추가 열화가 "
+                "빠져 있어 낙관 방향이다",
+                "ρ 곡선은 검출기가 해당 영역을 원 해상도로 본다고 가정한다 "
+                "(타일링·크롭 추론). 4K 프레임을 통째로 축소해 넣는 파이프라인은 "
+                "이보다 나쁘다",
                 "카메라 부각(pitch)은 검사하지 않는다 — 작업면을 덮도록 "
                 "조준했다고 본다",
                 "비계 점유율은 잠정값이다. 건설현장 실측 가림률 통계가 없다",

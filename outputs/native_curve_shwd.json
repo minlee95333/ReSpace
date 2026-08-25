@@ -1,0 +1,159 @@
+{
+ "source": "SHWD/VOC2028 test (변형 없음)",
+ "detector": "yolov8n",
+ "detector_weights": "runs\\detect\\shwd_yolov8n\\weights\\best.pt",
+ "iou_thr": 0.5,
+ "conf_thr": 0.25,
+ "method": "인스턴스 단위 베르누이 최대우도. 3모수 로지스틱 L/(1+exp(-k(x-x0)))",
+ "note": "변형 없는 실사진의 실제 머리 픽셀 크기로 잰 값이다",
+ "targets": {
+  "helmet_nohat": {
+   "class": "person",
+   "n_instances": 22558,
+   "f_rho": {
+    "form": "logistic",
+    "L": 0.9600978524434653,
+    "k": 0.16501919476924082,
+    "x0": 1.17610228686361,
+    "measured_range_px": [
+     5.0,
+     1183.0
+    ],
+    "extrapolation": "4px 미만은 detect_model.py 가 0 으로 본다"
+   },
+   "nll": 6442.5635590190395,
+   "bins": [
+    {
+     "lo": 4,
+     "hi": 8,
+     "n": 83,
+     "recall": 0.6506,
+     "fitted": 0.6801
+    },
+    {
+     "lo": 8,
+     "hi": 12,
+     "n": 1011,
+     "recall": 0.7755,
+     "fitted": 0.7821
+    },
+    {
+     "lo": 12,
+     "hi": 16,
+     "n": 3772,
+     "recall": 0.8539,
+     "fitted": 0.8525
+    },
+    {
+     "lo": 16,
+     "hi": 24,
+     "n": 8570,
+     "recall": 0.9102,
+     "fitted": 0.913
+    },
+    {
+     "lo": 24,
+     "hi": 32,
+     "n": 3689,
+     "recall": 0.9469,
+     "fitted": 0.9468
+    },
+    {
+     "lo": 32,
+     "hi": 48,
+     "n": 2495,
+     "recall": 0.9531,
+     "fitted": 0.9579
+    },
+    {
+     "lo": 48,
+     "hi": 96,
+     "n": 1869,
+     "recall": 0.962,
+     "fitted": 0.9601
+    },
+    {
+     "lo": 96,
+     "hi": null,
+     "n": 1069,
+     "recall": 0.9626,
+     "fitted": 0.9601
+    }
+   ]
+  },
+  "helmet_worn": {
+   "class": "hat",
+   "n_instances": 1878,
+   "f_rho": {
+    "form": "logistic",
+    "L": 0.9666653772214568,
+    "k": 0.2234685162196478,
+    "x0": 11.537579269871312,
+    "measured_range_px": [
+     1.0,
+     1709.0
+    ],
+    "extrapolation": "4px 미만은 detect_model.py 가 0 으로 본다"
+   },
+   "nll": 466.9315180148765,
+   "bins": [
+    {
+     "lo": 4,
+     "hi": 8,
+     "n": 37,
+     "recall": 0.1081,
+     "fitted": 0.2298
+    },
+    {
+     "lo": 8,
+     "hi": 12,
+     "n": 88,
+     "recall": 0.3864,
+     "fitted": 0.3769
+    },
+    {
+     "lo": 12,
+     "hi": 16,
+     "n": 95,
+     "recall": 0.6526,
+     "fitted": 0.5885
+    },
+    {
+     "lo": 16,
+     "hi": 24,
+     "n": 222,
+     "recall": 0.8198,
+     "fitted": 0.8323
+    },
+    {
+     "lo": 24,
+     "hi": 32,
+     "n": 152,
+     "recall": 0.9145,
+     "fitted": 0.9391
+    },
+    {
+     "lo": 32,
+     "hi": 48,
+     "n": 237,
+     "recall": 0.9494,
+     "fitted": 0.9643
+    },
+    {
+     "lo": 48,
+     "hi": 96,
+     "n": 374,
+     "recall": 0.9652,
+     "fitted": 0.9667
+    },
+    {
+     "lo": 96,
+     "hi": null,
+     "n": 672,
+     "recall": 0.9747,
+     "fitted": 0.9667
+    }
+   ]
+  }
+ }
+}

@@ -57,3 +57,6 @@ outputs/*_전달용/
 /*.png
 /*.log
 build/
+
+# 선행연구 원문 PDF — 출판사 저작물이므로 올리지 않는다 (README.md 는 유지)
+docs/reference/papers/*.pdf

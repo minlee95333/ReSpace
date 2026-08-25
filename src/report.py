@@ -121,7 +121,13 @@ def build_payload() -> dict:
         "curve": {
             "source": str(config.CURVE_PARAMS_JSON.relative_to(config.ROOT)),
             "rho_measured_px": curve.p["f_rho"]["measured_range_px"],
-            "r2_full_grid": curve.p["r2_full_grid"],
+            # ρ 축을 실사진 실측으로 바꾼 뒤 r2_full_grid 는 null 이다.
+            # 합성 격자를 맞히는 것이 더 이상 목적이 아니기 때문이다
+            # (src/apply_native_rho.py 의 설명 참조).
+            "r2_full_grid": curve.p.get("r2_full_grid"),
+            "r2_rho_native": curve.p.get("r2_rho_native"),
+            "f_rho_source": curve.p.get("f_rho_source"),
+            "g_theta_h_occ_source": curve.p.get("g_theta_h_occ_source"),
         },
         "geometric_baseline": {
             "standard": "IEC 62676-4 (DORI)",

@@ -183,7 +183,9 @@ def run_condition(model, records: list, rho: float, theta: float, occ: float,
 def main(smoke: bool, limit: int | None,
          occ_divisor: int = T.DEFAULT_STRIPE_DIVISOR,
          out_csv: Path | None = None,
-         occ_only: bool = False) -> Path:
+         occ_only: bool = False,
+         manifest_path: Path | None = None,
+         rho_only: bool = False) -> Path:
     """occ_only 는 h(o) 단면(ρ=48, θ=0)만 돌린다 - 주기 민감도용이다.
 
     가림축이 결과를 지배하는데 스트라이프 주기는 §4.2 가 자유 파라미터로 남긴
@@ -197,13 +199,17 @@ def main(smoke: bool, limit: int | None,
             f"파인튜닝 가중치가 없다: {WEIGHTS}\n"
             "먼저 `python src/train_detector.py` 를 돌릴 것."
         )
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    manifest = json.loads((manifest_path or MANIFEST).read_text(encoding="utf-8"))
     records = manifest["images"][:limit] if limit else manifest["images"]
 
     if smoke:
         grid = [(r, t, o) for r in config.SMOKE_RHO_PX
                 for t in config.SMOKE_THETA_DEG for o in config.SMOKE_OCC_PCT]
         out_csv = out_csv or config.OUTPUTS / "smoke_results.csv"
+    elif rho_only:
+        # ρ 단면(θ=0, o=0)만. 다른 데이터셋에 같은 변형을 걸어 f(ρ) 를 재는 용도다
+        grid = [(r, 0.0, 0.0) for r in config.RHO_LEVELS_PX]
+        out_csv = out_csv or config.OUTPUTS / "rho_section.csv"
     elif occ_only:
         grid = [(48.0, 0.0, o) for o in config.OCC_LEVELS_PCT]
         out_csv = out_csv or config.OUTPUTS / f"occ_section_div{occ_divisor}.csv"
@@ -276,5 +282,10 @@ if __name__ == "__main__":
     ap.add_argument("--occ-only", action="store_true",
                     help="h(o) 단면(ρ=48, θ=0)만 - 주기 민감도용")
     ap.add_argument("--out", type=Path, default=None, help="출력 CSV 경로")
+    ap.add_argument("--manifest", type=Path, default=None,
+                    help="실험셋 manifest 경로 (기본: data/filtered/manifest.json)")
+    ap.add_argument("--rho-only", action="store_true",
+                    help="f(ρ) 단면(θ=0, o=0)만 - 데이터셋 간 비교용")
     args = ap.parse_args()
-    main(args.smoke, args.limit, args.occ_divisor, args.out, args.occ_only)
+    main(args.smoke, args.limit, args.occ_divisor, args.out, args.occ_only,
+         args.manifest, args.rho_only)

@@ -18,9 +18,9 @@
     "c_s085",
     "c_b000"
    ],
-   "WDR": 0.5626,
-   "fail_voxel_count": 15468,
-   "delta_WDR": 0.0997,
+   "WDR": 0.3353,
+   "fail_voxel_count": 24438,
+   "delta_WDR": 0.1127,
    "is_default": false
   },
   {
@@ -37,9 +37,9 @@
     "c_s085",
     "c_s069"
    ],
-   "WDR": 0.4151,
-   "fail_voxel_count": 24160,
-   "delta_WDR": 0.2472,
+   "WDR": 0.2443,
+   "fail_voxel_count": 27692,
+   "delta_WDR": 0.2037,
    "is_default": false
   },
   {
@@ -56,9 +56,9 @@
     "c_b018",
     "c_b003"
    ],
-   "WDR": 0.5873,
-   "fail_voxel_count": 8202,
-   "delta_WDR": 0.075,
+   "WDR": 0.4252,
+   "fail_voxel_count": 25111,
+   "delta_WDR": 0.0228,
    "is_default": true
   },
   {
@@ -75,9 +75,9 @@
     "c_s067",
     "c_s066"
    ],
-   "WDR": 0.1751,
-   "fail_voxel_count": 31804,
-   "delta_WDR": 0.4872,
+   "WDR": 0.1316,
+   "fail_voxel_count": 36348,
+   "delta_WDR": 0.3164,
    "is_default": false
   }
  ],
@@ -93,8 +93,8 @@
     "c_b018",
     "c_b003"
    ],
-   "WDR": 0.5873,
-   "fail_voxel_count": 8202
+   "WDR": 0.4252,
+   "fail_voxel_count": 25111
   },
   "assumed": {
    "camera_ids": [
@@ -107,29 +107,29 @@
     "c_b010",
     "c_b011"
    ],
-   "WDR": 0.5843,
-   "fail_voxel_count": 9926,
+   "WDR": 0.428,
+   "fail_voxel_count": 26827,
    "curve_source": "DORI_recognise_125ppm"
   },
   "empirical": {
    "camera_ids": [
     "c_b018",
-    "c_b001",
+    "c_b003",
     "c_b002",
     "c_b017",
+    "c_b012",
+    "c_b001",
     "c_b016",
-    "c_b003",
-    "c_b031",
-    "c_b000"
+    "c_b007"
    ],
-   "WDR": 0.6623,
-   "fail_voxel_count": 2706
+   "WDR": 0.448,
+   "fail_voxel_count": 24704
   }
  },
  "delta_WDR": {
-  "empirical_minus_geometric": 0.075,
-  "empirical_minus_assumed": 0.078,
-  "assumed_minus_geometric": -0.003
+  "empirical_minus_geometric": 0.0228,
+  "empirical_minus_assumed": 0.02,
+  "assumed_minus_geometric": 0.0028
  },
  "overlap_camera_count": {
   "empirical_vs_geometric": 4,
@@ -139,13 +139,13 @@
   "_note": "ADDENDUM-01 §5.3 의 4항목 분해(person/helmet/pose-fallen/pose-gesture)는 현재 CLAUDE.md 스펙에 없어 미구현이다. 지금 곡선은 안전모 미착용(recall_nohat) 단일 항목이다.",
   "target": "helmet_nohat",
   "geometric": {
-   "helmet_nohat": 0.5873
+   "helmet_nohat": 0.4252
   },
   "assumed": {
-   "helmet_nohat": 0.5843
+   "helmet_nohat": 0.428
   },
   "empirical": {
-   "helmet_nohat": 0.6623
+   "helmet_nohat": 0.448
   }
  },
  "status": "ok"

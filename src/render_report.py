@@ -223,8 +223,9 @@ def write(rep: dict, path: Path) -> Path:
  <tr><th>검출기</th><td>{E(str(rep['basis']['detector']))} —
   {E(str(rep['basis']['detector_weights']))}</td></tr>
  <tr><th>검출확률 곡선</th><td>{E(rep['basis']['curve'])} ·
-  전체 격자 R² {rep['basis']['r2_full_grid']} ·
-  ρ 실측 범위 {rho[0]:.0f}–{rho[1]:.0f}px</td></tr>
+  ρ 실사진 실측 R² {rep['basis'].get('r2_rho_native')} ·
+  ρ 실측 범위 {rho[0]:.0f}–{rho[1]:.0f}px ·
+  θ·o 는 합성 격자 (R² {rep['basis'].get('r2_full_grid_synthetic_rho', '별도 파일')})</td></tr>
  <tr><th>카메라 사양</th><td>{spec['img_w']}×{spec['img_h']} ·
   수평화각 {spec['hfov_deg']:.0f}°</td></tr>
 </table>

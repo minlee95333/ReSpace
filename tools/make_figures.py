@@ -7,6 +7,7 @@
 """
 import csv
 import json
+import json
 from pathlib import Path
 
 import matplotlib
@@ -107,12 +108,23 @@ specs = [
     ("occ_pct_target", {"rho_px": 48.0, "theta_deg": 0.0}, h_occ,
      "가려진 정도 (%)", (-4, 79), True),
 ]
+# ρ 축의 관측점은 **합성 격자가 아니라 실사진 실측**이다 (2026-08-25).
+# 곡선을 실측으로 갈아끼운 뒤에도 옛 격자 점을 찍으면 점과 선이 어긋난 그림이
+# 나온다. 실제로 한 번 그렇게 나왔다.
+_native = json.loads((ROOT / "outputs" / "native_curve.json").read_text(encoding="utf-8"))
+_nb = _native["targets"]["helmet_nohat"]["bins"]
+NATIVE_RHO = [(0.5 * (b["lo"] + (b["hi"] or 120)), b["recall"]) for b in _nb]
+
 for ax, (xkey, fixed, fn, xlabel, xlim, hot) in zip(axes, specs):
-    pts = section(fixed)
-    xs = np.array([p[xkey] for p in pts])
-    ys = np.array([p["recall_nohat"] for p in pts]) / BASE
+    if xkey == "rho_px":
+        xs = np.array([x for x, _ in NATIVE_RHO])
+        ys = np.array([y for _, y in NATIVE_RHO]) / BASE
+    else:
+        pts = section(fixed)
+        xs = np.array([p[xkey] for p in pts])
+        ys = np.array([p["recall_nohat"] for p in pts]) / BASE
     o = np.argsort(xs); xs, ys = xs[o], ys[o]
-    grid = np.linspace(max(xs.min(), 0.1), xs.max(), 300)
+    grid = np.linspace(max(xs.min(), 0.1), 48.0 if xkey == "rho_px" else xs.max(), 300)
     fit = fn(grid / 100.0 if xkey == "occ_pct_target" else grid)
     if xkey == "rho_px":
         fit = fit / BASE

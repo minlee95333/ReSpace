@@ -58,7 +58,13 @@ THRESHOLDS = [0.4, 0.5, 0.6]
 def both_placements(site, pairs, curve) -> dict:
     """기하·확률 두 배치를 같은 자로 재고 요약을 낸다."""
     res = optimize.run(site, pairs, curve)
-    g, p = res["geometric"], res["probabilistic"]
+    # optimize.run 이 geometric / assumed / empirical 셋을 내도록 바뀌면서
+    # "probabilistic" 키가 사라졌다. 이 파일이 그걸 못 따라가 KeyError 로 죽었고,
+    # 그래서 outputs/sensitivity.json 이 2026-08-15 값에 멈춰 있었다.
+    # 비교 대상은 실측 곡선 배치이므로 empirical 을 쓴다.
+    # 아래로 나가는 JSON 키 이름(WDR_probabilistic)은 tools/build_*.py 가 그대로
+    # 읽고 있어 유지한다.
+    g, p = res["geometric"], res["empirical"]
     return {
         "geometric": {"WDR": g["WDR"], "fail": g["fail_voxel_count"],
                       "camera_ids": g["camera_ids"]},
@@ -143,11 +149,16 @@ def sweep_threshold(site, res: dict) -> list:
     임계는 판정선일 뿐 목적함수가 아니라 배치가 바뀌지 않는다.
     """
     out = []
+    # 분모는 aggregate.py 와 같아야 한다 — 사람이 있을 수 있는 복셀만 센다.
+    # 전 복셀로 세면 site_eval.json 의 fail_voxel_count 와 어긋나 같은 표에
+    # 두 종류 숫자가 섞인다 (2026-08-25 확인).
+    vox = [v for v in site.voxels if v.get("occupiable", True)]
     for thr in THRESHOLDS:
-        fg = sum(1 for v in site.voxels if res["per_voxel_geo"][v["id"]] < thr)
-        fp = sum(1 for v in site.voxels if res["per_voxel"][v["id"]] < thr)
+        fg = sum(1 for v in vox if res["per_voxel_geo"][v["id"]] < thr)
+        fp = sum(1 for v in vox if res["per_voxel"][v["id"]] < thr)
         out.append({"threshold": thr, "fail_geometric": fg,
-                    "fail_probabilistic": fp, "reduction": fg - fp})
+                    "fail_probabilistic": fp, "reduction": fg - fp,
+                    "n_occupiable": len(vox)})
     return out
 
 
