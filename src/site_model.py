@@ -229,7 +229,7 @@ def zone_weights(zones: list = None) -> dict:
 
 # ── 카메라 후보 ───────────────────────────────────────────────────────────
 
-def _cameras(spacing_m: float = None) -> list:
+def _cameras(spacing_m: float = None, solids: list = None) -> list:
     """설치 가능한 자리에 후보를 **격자로 깐다** (2026-08-20).
 
     종전에는 24개를 손으로 찍었다. 그러면 재배치 처방이 그 24곳 안에서만
@@ -251,6 +251,8 @@ def _cameras(spacing_m: float = None) -> list:
     """
     sp = spacing_m or config.CAMERA_SPACING_M
     W, D = config.SITE_WIDTH_M, config.SITE_DEPTH_M
+    if solids is None:
+        solids = _solids()
     cams, seen = [], set()
 
     def add(x, y, z, mount, tag):
@@ -273,31 +275,49 @@ def _cameras(spacing_m: float = None) -> list:
         add(W - 1.0, y, 6.0, "boundary_pole", "b")
 
     # ② 코어 상부 — 코어 윗면 둘레
-    for cx in (30.0, 70.0):
-        for dx in (-6.0, 0.0, 6.0):
-            for dy in (-8.0, 0.0, 8.0):
+    #
+    # **골조에서 유도한다** (2026-08-27). 종전에는 코어를 (30,30)·(70,30) 으로,
+    # 비계를 (16,12)-(84,48) 로 이 함수 안에 박아 두었다. 현장을 실제 도면으로
+    # 바꾸는 순간 카메라 후보가 건물과 따로 놀았다. 형상이 바뀌면 설치 가능
+    # 자리도 따라 바뀌어야 한다 — 그것이 이 도구가 받는 입력의 성질이다.
+    for b in [x for x in solids if x.kind == "core"]:
+        cx, cy = (b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2
+        hx, hy = (b.x2 - b.x1) / 2, (b.y2 - b.y1) / 2
+        for dx in (-hx, 0.0, hx):
+            for dy in (-hy, 0.0, hy):
                 if dx == 0.0 and dy == 0.0:
                     continue
-                add(cx + dx, 30.0 + dy, 13.0, "core_top", "k")
+                add(cx + dx, cy + dy, b.z2 - 1.0, "core_top", "k")
 
     # ③ 비계 상단 난간 — 실제로 카메라를 다는 자리다
-    ox1, oy1, ox2, oy2 = 16.0, 12.0, 84.0, 48.0
-    for z in (8.0, 12.0):
-        for i in range(max(2, int(round((ox2 - ox1) / sp)))):
-            x = ox1 + (ox2 - ox1) * (i + 0.5) / max(2, int(round((ox2 - ox1) / sp)))
-            add(x, oy1, z, "scaffold_rail", "s")
-            add(x, oy2, z, "scaffold_rail", "s")
-        for j in range(max(2, int(round((oy2 - oy1) / sp)))):
-            y = oy1 + (oy2 - oy1) * (j + 0.5) / max(2, int(round((oy2 - oy1) / sp)))
-            add(ox1, y, z, "scaffold_rail", "s")
-            add(ox2, y, z, "scaffold_rail", "s")
+    sc = [x for x in solids if x.kind == "scaffold"]
+    if sc:
+        ox1 = min(x.x1 for x in sc); oy1 = min(x.y1 for x in sc)
+        ox2 = max(x.x2 for x in sc); oy2 = max(x.y2 for x in sc)
+        top = max(x.z2 for x in sc)
+        nx = max(2, int(round((ox2 - ox1) / sp)))
+        ny = max(2, int(round((oy2 - oy1) / sp)))
+        # 비계 난간은 층마다 있다. 슬래브 레벨 중 비계 안에 드는 것을 쓴다.
+        rails = [z for z in config.SLAB_LEVELS_M if 2.0 < z < top - 1.0] or [top / 2]
+        for z in rails:
+            for i in range(nx):
+                x = ox1 + (ox2 - ox1) * (i + 0.5) / nx
+                add(x, oy1, z, "scaffold_rail", "s")
+                add(x, oy2, z, "scaffold_rail", "s")
+            for j in range(ny):
+                y = oy1 + (oy2 - oy1) * (j + 0.5) / ny
+                add(ox1, y, z, "scaffold_rail", "s")
+                add(ox2, y, z, "scaffold_rail", "s")
 
-    # ④ 타워크레인 마스트 주변
+    # ④ 타워크레인 마스트 주변 — 마스트 좌표는 zones.json 의 인양반경과 같은 점이다
+    mx, my = config.TOWER_CRANE_MAST_XY
     for dx in (-8.0, 0.0, 8.0):
         for dy in (-8.0, 0.0, 8.0):
             if dx == 0.0 and dy == 0.0:
                 continue
-            add(50.0 + dx, 30.0 + dy, 25.0, "tower_crane", "t")
+            x, y = mx + dx, my + dy
+            if 0.0 <= x <= W and 0.0 <= y <= D:
+                add(x, y, config.TOWER_CRANE_CAM_Z_M, "tower_crane", "t")
 
     return cams
 
@@ -411,7 +431,7 @@ def build(scaffold_coverage: float = None, weight_profile: str = None) -> Site:
         depth=config.SITE_DEPTH_M,
         solids=solids,
         zones=zones,
-        cameras=_cameras(),
+        cameras=_cameras(solids=solids),
         voxels=_voxels(solids, zones),
     )
 
