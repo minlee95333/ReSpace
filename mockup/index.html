@@ -155,6 +155,16 @@ canvas{display:block;width:100%;height:100%;
 .delta b{color:var(--color-ink);font-weight:600}
 .delta .arrow{color:var(--color-muted);padding:0 1px}
 .delta .gain{color:var(--color-ink);font-weight:600}
+.mbtn{border:var(--rule-hair) solid var(--color-rule);background:var(--color-paper-3);
+  border-radius:9px;padding:4px 10px;cursor:pointer;font:inherit;
+  font-size:var(--text-2xs);color:var(--color-ink-2)}
+.mbtn:hover{background:var(--color-paper-2);color:var(--color-ink)}
+.mlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:3px 10px;
+  font-size:var(--text-2xs);max-height:none}
+.mlist label{gap:6px;padding:2px 0;cursor:pointer}
+.mlist .mnt{color:var(--color-muted)}
+.mlist h4{grid-column:1/-1;margin:8px 0 2px;font-size:var(--text-2xs);
+  color:var(--color-muted);font-weight:600;letter-spacing:.04em}
 label{font-size:var(--text-2xs);color:var(--color-ink-2);display:inline-flex;
       gap:5px;align-items:center;cursor:pointer}
 input[type=radio],input[type=checkbox]{accent-color:var(--color-chrome);margin:0}
@@ -310,6 +320,7 @@ function render(){
         <button class="tab" role="tab" data-t="sum" aria-selected="true">개요</button>
         <button class="tab" role="tab" data-t="plan" aria-selected="false">평면도</button>
         <button class="tab" role="tab" data-t="fail" aria-selected="false">미달구역 ${fails.length.toLocaleString()}</button>
+        <button class="tab" role="tab" data-t="manual" aria-selected="false">직접 배치</button>
         <button class="tab" role="tab" data-t="cmp" aria-selected="false">배치 비교</button>
         <button class="tab" role="tab" data-t="dori" aria-selected="false">기준선</button>
       </div>
@@ -357,6 +368,20 @@ function render(){
             위험가중치 순 상위 400개만 표시 · 전체 ${fails.length.toLocaleString()}개</p>`:''}
         </section>
 
+        <section class="tabpanel" data-p="manual">
+          <p style="margin:0 0 8px;font-size:var(--text-2xs);color:var(--color-muted);line-height:1.6">
+            <b>설치 가능 위치 중에서 직접 골라 본다.</b> 이 도구의 목적은 배치안을 자동으로
+            최적화하는 것이 아니라, 계획하거나 실제 설치한 배치가 적정한지를 평가하는 것이다.
+            고를 때마다 위험가중 검출률을 다시 계산한다.</p>
+          <div id="mstat" class="delta" style="margin:0 0 8px"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="mbtn" id="mgeo">현재 배치 불러오기</button>
+            <button class="mbtn" id="memp">제안 배치 불러오기</button>
+            <button class="mbtn" id="mclr">비우기</button>
+          </div>
+          <div id="mlist" class="mlist">불러오는 중…</div>
+        </section>
+
         <section class="tabpanel" data-p="cmp">
           <table><thead><tr><th>기준</th><th class="num">WDR</th><th class="num">미달</th></tr></thead>
             <tbody>
@@ -401,16 +426,104 @@ function render(){
   wire();
 }
 
-function mountMap(view, ghosts){
+function mountMap(view, ghosts, camIds){
   const cv = document.getElementById('map');
   const box = cv.parentElement.getBoundingClientRect();
   cv.style.height = Math.max(180, box.height - 16) + 'px';
   VIEWER = new CoverageViewer.Viewer(cv, D, {
     mode: MODE, level: 0, key: 'P_total_' + view,
-    cameraIds: (D.placements[view]||{}).camera_ids || [],
+    // 직접 배치는 placements 에 없으므로 목록을 그대로 받는다. 빈 배열을
+    // 넘기면 뷰어가 "선택 없음 = 전부 선택"으로 읽어 후보가 다 켜진다.
+    cameraIds: camIds || (D.placements[view]||{}).camera_ids || [],
     ghostCameraIds: ghosts || [],
   });
   VIEWER.setMode(MODE);
+}
+
+/* ── 직접 배치 ─────────────────────────────────────────────────────────
+ * 사용자가 설치 가능 위치 중에서 카메라를 고르면 P_total 을 브라우저에서
+ * 다시 계산한다. 그러려면 카메라별 검출확률이 있어야 하는데, 전 후보를 다
+ * 실으면 37MB 라 96개만 내보냈다(src/export_picker.py). 세 배치가 실제로
+ * 고른 카메라는 무조건 포함돼 있어 그 배치를 화면에서 재현할 수 있다.
+ *
+ * 탭을 처음 열 때만 읽는다 — 12MB 를 첫 화면에서 받으면 로딩이 늦어진다. */
+let MX = null, MSEL = new Set(), MIDX = null;
+
+async function loadMatrix(){
+  if (MX) return MX;
+  const [meta, buf] = await Promise.all([
+    fetch('pmatrix.json').then(r=>r.json()),
+    fetch('pmatrix.bin').then(r=>r.arrayBuffer())]);
+  MX = {meta, a: new Uint8Array(buf), n: meta.n_voxels};
+  // 행렬의 셀 순서 -> D.voxels 인덱스. 한 번만 만든다.
+  const pos = new Map(D.voxels.map((v,i)=>[v.id,i]));
+  MIDX = meta.voxel_ids.map(id=>pos.get(id));
+  return MX;
+}
+
+/* 선택된 카메라로 P_total 을 다시 계산해 복셀에 써 넣는다.
+ * P_total = 1 - Π(1-P) — 중첩은 페널티가 아니라 이득이다(CLAUDE.md §5.3). */
+function recalcManual(){
+  const {meta, a, n} = MX;
+  const sel = meta.cameras.map((c,i)=>MSEL.has(c.id)?i:-1).filter(i=>i>=0);
+  const keep = new Float32Array(n).fill(1);          // Π(1-P)
+  for (const ci of sel){
+    const off = ci*n;
+    for (let j=0;j<n;j++){ const b=a[off+j]; if (b) keep[j] *= 1 - b/255; }
+  }
+  const thr = meta.threshold, W = meta.weights;
+  let num=0, den=0, fail=0;
+  for (let j=0;j<n;j++){
+    const pt = 1 - keep[j];
+    D.voxels[MIDX[j]].P_total_manual = pt;
+    const w = W[j]; num += w*pt; den += w;
+    if (pt < thr) fail++;
+  }
+  return {wdr: den? num/den : 0, fail, n, picked: sel.length,
+          budget: meta.camera_budget};
+}
+
+function renderManual(){
+  const r = recalcManual();
+  const over = r.picked > r.budget;
+  document.getElementById('mstat').innerHTML =
+    `<span>선택 <b>${r.picked}대</b> / 예산 ${r.budget}대`
+    + (over? ' <span style="color:var(--color-warn,#8C2018)">초과</span>':'') + `</span>`
+    + `<span>WDR <b>${pct(r.wdr)}</b></span>`
+    + `<span>미달 <b>${r.fail.toLocaleString()}</b> / ${r.n.toLocaleString()}</span>`;
+  // VIEW 는 그대로 둔다. render() 가 placements[VIEW] 를 찾으므로
+  // 'manual' 을 넣으면 배치 탭·델타 띠가 무너진다.
+  mountMap('manual', [], [...MSEL]);
+}
+
+async function openManual(){
+  const box = document.getElementById('mlist');
+  if (!box || box.dataset.on) { if (MX) renderManual(); return; }
+  try { await loadMatrix(); } catch(e){
+    box.innerHTML = '<p style="grid-column:1/-1;color:var(--color-muted);line-height:1.6">'
+      + '검출확률 행렬(<code>pmatrix.bin</code>)이 없다. 현장을 바꾼 뒤에는 '
+      + '<code>python src/export_picker.py</code> 로 다시 내보내야 한다.</p>';
+    return; }
+  const KO = {boundary_pole:'현장 경계 폴', core_top:'코어 상부',
+              scaffold_rail:'비계 난간', tower_crane:'타워크레인'};
+  const g = {};
+  MX.meta.cameras.forEach(c=>(g[c.mount]=g[c.mount]||[]).push(c));
+  box.innerHTML = Object.entries(g).map(([m,cs])=>
+    `<h4>${KO[m]||m} ${cs.length}</h4>` + cs.map(c=>
+      `<label><input type="checkbox" data-c="${c.id}">`
+      + `${c.id} <span class="mnt">z${c.z}m</span></label>`).join('')).join('');
+  box.dataset.on = '1';
+  box.querySelectorAll('input[data-c]').forEach(b=>b.onchange=()=>{
+    b.checked ? MSEL.add(b.dataset.c) : MSEL.delete(b.dataset.c);
+    renderManual(); });
+  const setSel = (ids)=>{
+    MSEL = new Set(ids.filter(i=>MX.meta.cameras.some(c=>c.id===i)));
+    box.querySelectorAll('input[data-c]').forEach(b=>b.checked=MSEL.has(b.dataset.c));
+    renderManual(); };
+  document.getElementById('mgeo').onclick = ()=>setSel((D.placements.geometric||{}).camera_ids||[]);
+  document.getElementById('memp').onclick = ()=>setSel((D.placements.empirical||{}).camera_ids||[]);
+  document.getElementById('mclr').onclick = ()=>setSel([]);
+  setSel((D.placements.empirical||{}).camera_ids||[]);
 }
 
 /* 평면도. 탭을 처음 열 때 한 번만 그린다 — 숨어 있을 때 그리면 캔버스
@@ -441,6 +554,7 @@ function wire(){
     document.querySelectorAll('.tabpanel').forEach(p=>
       p.classList.toggle('on', p.dataset.p === t.dataset.t));
     document.getElementById('tabbody').scrollTop = 0;
+    if (t.dataset.t === 'manual') openManual();
     if (t.dataset.t === 'plan') {
       const view = D.placements[VIEW] ? VIEW : Object.keys(D.placements)[0];
       if (!PLAN) mountPlan(view); else PLAN.resize();

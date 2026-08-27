@@ -204,13 +204,19 @@ def all_pairs(site, cameras=None, fixed_yaws: dict = None) -> tuple[dict, dict]:
     """
     cams = list(cameras if cameras is not None else site.cameras)
     fixed_yaws = fixed_yaws or {}
+    # **사람이 있을 수 있는 복셀에만 광선을 쏜다** (2026-08-27).
+    # 검출 대상은 사람이고, 지표(WDR)의 분모도 occupiable 뿐이며, 뷰어도
+    # occupiable 이 아닌 복셀은 애초에 그리지 않는다(viewer._ensurePrep).
+    # 그런데 여기서는 전 복셀에 쐈다 — 단지 전체로 넓히니 그 낭비가 3분의 2였다.
+    # 372,567 복셀 중 활동공간은 124,632 개다.
+    targets = [v for v in site.voxels if v.get("occupiable", True)]
     yaws, out = {}, {}
     for cam in cams:
         # 가림률은 방위와 무관하다. 카메라당 한 번만 쏘고 두 곳에서 쓴다.
-        row = occlusion_row(cam, site.voxels, site.solids)
+        row = occlusion_row(cam, targets, site.solids)
         yaws[cam.cid] = (fixed_yaws[cam.cid] if cam.cid in fixed_yaws
-                         else choose_yaw(cam, site.voxels, site.solids, row))
-        for v, occ in zip(site.voxels, row):
+                         else choose_yaw(cam, targets, site.solids, row))
+        for v, occ in zip(targets, row):
             out[(cam.cid, v["id"])] = pair(v, cam, site.solids,
                                            yaws[cam.cid], occ)
     return out, yaws

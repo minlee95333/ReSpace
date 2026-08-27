@@ -45,7 +45,9 @@ def evaluate(site, cam_ids, pairs: dict, curve) -> dict:
     fails = []
     for v in site.voxels:
         if not v.get("occupiable", True):
-            per_voxel[v["id"]] = p_total(v["id"], cam_ids, pairs, curve)
+            # 사람이 못 서는 자리에는 검출확률이 없다. 0 으로 두면 "미달"로
+            # 읽히고 지도가 온통 붉어진다. 값이 없다는 뜻의 None 이 맞다.
+            per_voxel[v["id"]] = None
             continue
         pt = p_total(v["id"], cam_ids, pairs, curve)
         per_voxel[v["id"]] = pt

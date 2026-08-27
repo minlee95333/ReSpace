@@ -646,7 +646,11 @@
       const ctx = this.ctx, d = this.d;
       const chromeInk = Theme.ui('--color-chrome');
       if (!(this.opts.showCams && d.cameras)) return;
+      // 빈 목록은 "아직 안 정했다"(=전부 표시)와 "한 대도 안 골랐다"가 다르다.
+      // 직접 배치에서 전부 지웠는데 후보가 다 켜지면 화면이 거짓말을 한다.
       const chosen = new Set(this.opts.cameraIds || []);
+      const noneMeansAll = this.opts.cameraIds === undefined
+                        || this.opts.cameraIds === null;
       /* 잔상 — 다른 배치에만 있는 자리. 점선 원으로만 남긴다.
          **화살표로 잇지 않는다.** 탐욕은 카메라를 1:1 로 옮기는 것이 아니라
          매번 처음부터 고르므로 "이 대가 저기로 갔다"는 대응이 없다. 선을
@@ -667,7 +671,7 @@
         ctx.restore();
       }
       d.cameras.forEach(c => {
-        const on = chosen.size === 0 || chosen.has(c.id);
+        const on = (noneMeansAll && chosen.size === 0) || chosen.has(c.id);
         const p = this._project(c.x, c.y, c.z);
         if (on) {
           const ang = (c.yaw_deg || 0) * DEG;
