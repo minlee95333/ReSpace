@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CCTV 배치 진단 — 검출확률 기준</title>
+<!-- 파비콘을 두지 않으면 브라우저가 /favicon.ico 를 찾다가 404 를 콘솔에 남긴다.
+     외부 호스트를 참조하지 않는다는 원칙을 지키려면 빈 데이터 URI 가 맞다. -->
+<link rel="icon" href="data:,">
+<!-- 디자인은 tokens.css 가 정본이다. 색·서체·간격을 여기서 만들지 않는다.
+     fonts.css 는 **쓰는 글자만 잘라 심은 서브셋**이라, 화면 문구를 새로 쓰면
+     `python tools/make_webfont.py` 를 다시 돌려야 한다. -->
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="fonts.css">
+<!--
+  CCTV 배치 진단 도구 (2026-08-22)
+
+  종전 목업은 미리 계산해 둔 배치를 보여주는 결과 뷰어였다. 이제 **사용자가
+  직접 CCTV 를 놓고, 놓는 즉시 브라우저가 검출확률을 계산한다.**
+
+  현장은 건설 목적물뿐이다(코어 벽체 · 슬래브). 실제 도면에 비계·적치물 같은
+  가설물이 없고 위험구역도 도면에 그리는 대상이 아니므로, 코드가 지어내지 않고
+  담당자 입력으로 받는다. 입력되면 그때 계산에 들어간다.
+
+  계산 = engine.js  (src/geometry.py + src/detect_model.py 를 옮긴 것.
+                     tools/test_engine.mjs 가 Python 값 1,600쌍과 대조한다)
+  설치 규칙 = mounts.js  (tools/test_mounts.mjs)
+  3D 표시 = viewer.js    (tools/test_viewer_lod.mjs)
+
+  빌드 스텝 없음. 외부 의존 없음. localStorage 쓰지 않음 (CLAUDE.md §7 Phase 4).
+-->
+<style>
+  /* 이름은 그대로 두고 값만 토큰으로 잇는다 - 아래 100여 개 규칙이 이 이름을
+     쓰고 있어 한 곳만 갈면 전부 따라온다. */
+  :root{
+    --bg:var(--color-paper); --panel:var(--color-paper-2);
+    --line:var(--color-rule); --ink:var(--color-ink); --dim:var(--color-muted);
+    /* **UI 크롬은 무채색이다.** 종전 이 자리에 파랑(#0b4f8a)이 있었는데
+       데이터 램프의 통과극과 ΔE 4.9 라 구분되지 않았다(tokens.css 머리말).
+       색은 데이터에만 쓴다 - 지도에 색이 보이면 그것은 검출확률이다. */
+    --accent:var(--color-chrome);
+    --bad:var(--scale-0); --mid:var(--color-w4); --good:var(--scale-1);
+
+    /* 소프트 엘리베이션. 그림자는 잉크의 알파일 뿐 새 색상을 만들지 않는다.
+       **경계선을 지우지 않는다** - 지우면 UI 경계 대비가 1.0:1 이 되어
+       기준(3:1)을 못 지킨다(report.html 의 「대비」 주석과 같은 판단). */
+    --sd:  oklch(21.2% 0.009 256 / 0.16);
+    --sd2: oklch(21.2% 0.009 256 / 0.10);
+    --sl:  oklch(100% 0 0 / 0.95);
+    --raise:    10px 10px 24px -10px var(--sd), -9px -9px 20px -10px var(--sl);
+    --raise-sm:  5px  5px 13px -6px var(--sd2), -5px -5px 12px -6px var(--sl);
+    --inset:    inset 5px 5px 11px -6px var(--sd2), inset -4px -4px 10px -6px var(--sl);
+  }
+  *{box-sizing:border-box}
+  /* .drawbar 가 display:flex 라 hidden 속성을 이겨 빈 띠가 남았다 */
+  [hidden]{display:none !important}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:var(--text-sm)/1.55 var(--font-ui);
+    font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  /* 고정폭은 **주인공 수치와 코드에만.** 표 값까지 걸면 "124,628개" 처럼
+     단위가 한글일 때 한 낱말 안에서 서체가 바뀐다. 자릿수 맞추기는
+     tabular-nums 로 충분하고 그건 본문 벌에도 있다. */
+  .card .v,.verdict .big,.verdict .val,code{
+    font-family:var(--font-num);font-variant-numeric:tabular-nums}
+  /* **작은 글씨 규칙.** 11~12px 한글을 400 으로 두면 회색 위에서 획이
+     끊긴다. 크기를 키우면 한 화면에 안 들어가므로 굵기를 올리고 자간을
+     좁히는 대신 벌린다. */
+  .sub,.pill,.card .k,.card .n,label,.hint,.tabs button,.acch .n,
+  .steps li,table,.legend,.meta{
+    font-weight:500;letter-spacing:var(--track-small)}
+  header{background:var(--panel);border-bottom:var(--rule-hair) solid var(--line);
+    padding:var(--space-xs) var(--space-md);display:flex;align-items:baseline;
+    gap:var(--space-xs);flex-wrap:wrap}
+  h1{font-size:var(--text-md);margin:0;font-weight:700;
+    letter-spacing:var(--track-tight)}
+  .sub{color:var(--dim);font-size:var(--text-xs)}
+  .pill{display:inline-block;border:var(--rule-hair) solid var(--line);
+    border-radius:var(--radius-chip);padding:2px 8px;font-size:var(--text-2xs);
+    color:var(--dim);background:var(--color-paper)}
+  a.pill{color:var(--color-ink-2)}
+  a.pill:hover{border-color:var(--color-ink-2);background:var(--color-paper-3)}
+  main{display:grid;grid-template-columns:300px 1fr;gap:14px;padding:14px 18px;
+    align-items:start}
+  @media (max-width:920px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:var(--rule-hair) solid var(--line);
+    border-radius:14px;padding:var(--space-xs);box-shadow:var(--raise-sm)}
+  .panel + .panel{margin-top:12px}
+  .panel h2{font-size:13px;margin:0 0 10px;letter-spacing:-.2px}
+  .panel h2 .n{font-weight:400;color:var(--dim);font-size:11.5px;margin-left:6px}
+  label{display:block;font-size:12.5px;color:var(--dim);margin:10px 0 4px}
+  input[type=number],select{width:100%;padding:5px 7px;border:1px solid var(--line);
+    border-radius:3px;font:inherit;font-size:13px;background:var(--color-paper-2)}
+  input[type=range]{width:100%}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  button{border:var(--rule-hair) solid var(--line);background:var(--color-paper-2);
+    border-radius:var(--radius-control);padding:5px 11px;font:inherit;
+    font-size:var(--text-xs);font-weight:500;letter-spacing:var(--track-small);
+    color:var(--color-ink-2);cursor:pointer;
+    transition:background var(--dur-short) var(--ease-out),
+               border-color var(--dur-short) var(--ease-out)}
+  button:hover{background:var(--color-paper-3)}
+  /* 눌린 상태도 무채색이다. 파랑으로 칠하면 지도의 통과극과 같은 색이 된다. */
+  button.on{background:var(--accent);border-color:var(--accent);
+    color:var(--color-paper-2)}
+  button:active{transform:scale(.98)}
+  button:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.danger{color:var(--bad)}
+  /* 캔버스 머리말 — 제목은 왼쪽, 화면 전환은 오른쪽 끝. 자주 쓰는 조작이라
+     접히는 단 안에 두지 않는다. */
+  .viewhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    margin-bottom:10px}
+  .viewhead h2{margin:0}
+  /* select 의 기본은 width:100% 다(왼쪽 폼용). 머리말에서는 내용 폭으로 둔다 —
+     안 그러면 한 줄을 통째로 차지해 탭이 아래로 밀린다. */
+  .viewhead #mapKind{width:auto;flex:0 0 auto;margin-left:auto}
+  .viewhead #mapKind ~ #resetView,
+  .viewhead #mapKind ~ .tabs{margin-left:8px}
+  .viewhead .tabs{margin-left:auto}
+  .viewhead #resetView{margin-left:auto}
+  .viewhead #resetView + .tabs{margin-left:8px}
+  .tabs{display:inline-flex;border:1px solid var(--line);border-radius:4px;
+    overflow:hidden}
+  .tabs button{border:0;border-right:var(--rule-hair) solid var(--line);
+    border-radius:0;padding:6px 13px}
+  .tabs button:last-child{border-right:0}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th,td{border-bottom:1px solid var(--line);padding:4px 5px;text-align:left}
+  th{color:var(--dim);font-weight:600;font-size:11.5px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.camrow{cursor:pointer}
+  tr.camrow.sel{background:var(--color-chrome-soft)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(146px,1fr));
+    gap:10px;margin-bottom:12px}
+  .card{background:var(--panel);border:var(--rule-hair) solid var(--line);
+    border-radius:14px;padding:10px 14px;box-shadow:var(--raise-sm)}
+  .card .k{font-size:11.5px;color:var(--dim)}
+  /* 고정폭은 이미 글자마다 폭이 같다. 큰 음수 자간까지 걸면 숫자가 서로
+     붙어 붙임체처럼 보인다 - 살짝만 조인다. */
+  .card .v{font-size:clamp(17px,1.7vw,26px);font-weight:600;
+    letter-spacing:-.012em;line-height:1.12;margin-top:2px;color:var(--color-ink)}
+  .card .n{font-size:11.5px;color:var(--dim);margin-top:2px;min-height:1.4em}
+  .card.pass .v{color:var(--good)} .card.fail .v{color:var(--bad)}
+
+  /* 왼쪽 패널이 4단으로 쌓여 스크롤해야 했다. 한 번에 하나만 편다. */
+  .acch{cursor:pointer;user-select:none;display:flex;align-items:baseline;
+    gap:6px;margin:0}
+  .acch .n{margin-left:auto;font-weight:400;color:var(--dim);font-size:11.5px}
+  .acch::before{content:'▸';color:var(--dim);font-size:10px;line-height:1;
+    transform:translateY(-1px)}
+  .panel.open .acch::before{content:'▾'}
+  .accb{display:none;margin-top:10px}
+  .panel.open .accb{display:block}
+  .panel.acc{padding:11px 14px}
+
+  /* 판정이 카드 다섯 중 하나로 묻혀 있었다. 따로 세운다. */
+  .verdict{display:flex;align-items:center;gap:var(--space-sm);
+    background:var(--panel);border:var(--rule-hair) solid var(--line);
+    border-left:5px solid var(--dim);border-radius:14px;
+    padding:var(--space-xs) var(--space-md);margin-bottom:var(--space-xs);
+    box-shadow:var(--raise)}
+  .verdict.pass{border-left-color:var(--good)}
+  .verdict.fail{border-left-color:var(--bad)}
+  .verdict .big{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1}
+  .verdict.pass .big{color:var(--good)} .verdict.fail .big{color:var(--bad)}
+  .verdict .val{font-size:26px;font-variant-numeric:tabular-nums;
+    letter-spacing:-.8px;line-height:1}
+  .verdict .meta{font-size:12px;color:var(--dim);line-height:1.5}
+  .verdict .bar{flex:1;height:8px;background:var(--color-rule-2);border-radius:4px;
+    overflow:hidden;min-width:80px}
+  .verdict .bar i{display:block;height:100%;background:var(--dim)}
+  .verdict.pass .bar i{background:var(--good)}
+  .verdict.fail .bar i{background:var(--bad)}
+  .verdict .tick{position:relative;font-size:11px;color:var(--dim)}
+  /* 처음 여는 사람이 "무엇부터 하나" 를 묻지 않게 한다.
+     색만으로 구분하지 않는다 — 상태는 글자(▶ 지금 / ✓ 완료)로도 읽힌다. */
+  .steps{display:flex;list-style:none;margin:0 0 8px;padding:0;background:var(--panel);
+    border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .steps li{flex:1;display:flex;align-items:baseline;gap:6px;padding:9px 12px;
+    border-right:1px solid var(--line);cursor:pointer;font-size:12.5px;color:var(--dim)}
+  .steps li:last-child{border-right:0}
+  .steps li:hover{background:var(--color-paper-3)}
+  .steps li b{font-weight:600;color:var(--ink)}
+  .steps li .st{margin-left:auto;font-size:11.5px;white-space:nowrap}
+  .steps li.now{background:var(--color-paper-3);box-shadow:inset 0 -3px 0 var(--accent);color:var(--color-ink)}
+  .steps li.now b,.steps li.now .st{color:var(--accent);font-weight:600}
+  .steps li.done b{color:var(--good)}
+  .steps li.done .st{color:var(--good)}
+  #stepHint{font-size:12.5px;color:var(--dim);margin:0 0 12px;padding-left:2px}
+  #stepHint b{color:var(--ink)}
+
+  /* 빈 화면 안내 — 카메라가 없을 때만 선다 */
+  .callout{border:1px solid var(--accent);border-left:4px solid var(--accent);
+    background:var(--color-paper-3);border-radius:var(--radius-panel);padding:11px 13px;margin-bottom:10px;
+    font-size:12.5px;line-height:1.65}
+  .callout .t{font-weight:600;color:var(--accent);display:block;margin-bottom:3px}
+  .callout ol{margin:4px 0 0;padding-left:18px}
+  .callout li{margin-bottom:2px}
+
+  /* 그리기 모드 — 도면 위에서 무엇을 해야 하는지 도면 옆에서 말한다 */
+
+  /* 방금 무엇이 달라졌는가 — 지표만 조용히 바뀌면 알아채지 못한다 */
+  .change{border:1px solid var(--line);border-left:4px solid var(--accent);
+    background:var(--panel);border-radius:4px;padding:8px 12px;margin-bottom:12px;
+    font-size:12.5px;color:var(--dim)}
+  .change b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .change .t{color:var(--accent);font-weight:600}
+  .change.flash{animation:flash .9s ease-out}
+  @keyframes flash{from{background:var(--color-chrome-soft)}to{background:var(--panel)}}
+  @media (prefers-reduced-motion:reduce){.change.flash{animation:none}}
+  tr.justadded td{background:var(--color-chrome-soft)}
+
+  /* 높이를 CSS 로 못박는다.
+   *
+   * canvas 에 width 속성이 없으면 기본값 300 이 잡히고, CSS 로 width:100% 만 주면
+   * 브라우저가 **종횡비(300:560)를 적용해 높이를 늘린다** — 1083px 폭에서 높이가
+   * 2,020px 이 됐다. 실제로 그런 상태였고 두 가지를 망가뜨렸다.
+   *   · 3D 뷰가 화면 밖 아래에 그려져 빈 캔버스로 보였다
+   *   · 픽셀이 3.6배라 합성 비용이 그만큼 늘어 회전이 무거웠다
+   * 높이를 명시하면 그 되먹임이 끊긴다. */
+  canvas{display:block;width:100%;height:560px;background:var(--color-paper-2);
+    border:var(--rule-hair) solid var(--line);border-radius:var(--radius-panel)}
+  #plan{cursor:crosshair}
+  #view3d{cursor:grab}
+  .legend{margin-top:8px;font-size:11.5px;color:var(--dim);
+    display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:2px;
+    vertical-align:-1px;margin-right:4px}
+  .hint{font-size:12px;color:var(--dim);margin:8px 0 0}
+  .warn{color:var(--bad)}
+  #err{display:none;margin:18px;padding:12px;border:1px solid var(--bad);
+    border-radius:4px;background:var(--color-paper-2);color:var(--bad);white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<div id="app" hidden>
+
+<header>
+  <h1>CCTV 배치 진단</h1>
+  <span class="sub">기하 가시성이 아니라 <b>AI 가 실제로 검출할 확률</b>로 잰다</span>
+  <span class="pill" id="inputState"></span>
+  <span class="pill" id="curveState"></span>
+  <!-- 다른 현장을 넣으려면 도면부터 옮겨야 한다. 그 화면으로 가는 길을
+       화면 안에 둔다 - 파일 목록에서 찾게 하지 않는다. -->
+  <!-- 결과를 표로 훑는 화면. 배치 도구가 본체이고 저쪽은 읽는 자리다. -->
+  <a class="pill" href="index.html" style="text-decoration:none"
+     title="개요·평면도·미달구역 목록을 표로 본다">결과 보고서 →</a>
+  <a class="pill" href="digitize.html" style="text-decoration:none"
+     title="2D 도면에서 현장 모델(building.json)을 만든다">다른 현장 넣기 →</a>
+</header>
+
+<main>
+  <!-- ── 조작 ───────────────────────────────────────────────────────── -->
+  <div>
+    <div class="panel acc open" data-acc="in">
+      <h2 class="acch">① 현장 입력 <span class="n" id="inputCount"></span></h2>
+      <div class="accb">
+      <p class="hint">위험구역은 <b>골조에서 도출한다</b> — 슬래브 단부·개구부
+        주변처럼 형상이 정하는 것들이다. 위험도 지수는 자체 산정하지 않고
+        기존 위험성평가 표에서 받는다. 이 화면에서 <b>고치지 않는다</b>.</p>
+      <table id="inputTable"><tbody></tbody></table>
+      <p class="hint">가설물(비계·적치물·펜스)은 시야를 막는 쪽으로만 들어가며
+        위험도를 직접 부여하지 않는다.</p>
+      </div>
+    </div>
+
+    <div class="panel acc" data-acc="h">
+      <h2 class="acch">② 설치 높이 <span class="n" id="hNote"></span></h2>
+      <div class="accb">
+      <label for="h">높이 (m)</label>
+      <!-- 기본값 7m. 층고를 3m 로 바꾼 뒤(2026-08-22) 6.0 이 2층 슬래브 상단과
+           겹쳤고, 그때는 우선순위가 높은 하나만 자리로 잡혀 폴이 통째로 사라졌다.
+           2026-08-23 에 성립하는 자리를 전부 돌려주도록 고쳐 그 문제는 없어졌다.
+           7m 는 구조물 상단과 겹치지 않아 폴·측면만 뜨는 값이라 그대로 둔다. -->
+      <input type="number" id="h" min="0" max="30" step="0.1" value="7">
+      <div class="row" id="presets"></div>
+      <p class="hint" id="mountHint"></p>
+      </div>
+    </div>
+
+    <div class="panel acc" data-acc="cam">
+      <h2 class="acch">③ 카메라 <span class="n" id="camCount"></span></h2>
+      <div class="accb">
+      <p class="hint">평면도에서 <b>파란 구역</b>을 클릭하면 그 자리에 놓인다.
+        놓은 뒤 방위를 돌려 맞춘다.</p>
+      <table id="camTable"><tbody></tbody></table>
+      <div id="aim" hidden>
+        <label for="yaw">방위 <span id="yawVal"></span></label>
+        <input type="range" id="yaw" min="0" max="345" step="15" value="0">
+        <p class="hint">15° 간격 · 수평화각 <span id="hfov"></span>°</p>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="exportPlan">계획서로 내보내기</button>
+        <button id="clear" class="danger">전부 지우기</button>
+      </div>
+      <p class="hint">내보낸 파일을 <code>data/plans/</code> 에 두면 Python
+        쪽(<code>src/plan_io.py</code>)이 같은 배치를 그대로 읽는다 — 화면에서
+        본 수치와 보고서의 수치가 같아진다.</p>
+      </div>
+    </div>
+
+    <div class="panel acc" data-acc="view">
+      <h2 class="acch">④ 보기 <span class="n" id="viewNote"></span></h2>
+      <div class="accb">
+      <div id="planOpts">
+        <label for="level">히트맵 높이 (z 1m 단면)</label>
+        <select id="level"></select>
+        <!-- 한 칸이 복셀 하나다. 층이 아니라 z 한 겹을 고른다. -->
+      </div>
+      <div id="v3dOpts" hidden>
+        <p class="hint">드래그로 회전 · 휠로 확대. 각도를 잃었으면 도면 위
+          <b>시점 초기화</b>를 누른다.</p>
+        <label for="zslice">보이는 높이</label>
+        <!-- 평면이 z 1m 단면을 보여 주는데 3D 는 부피 전부라 같은 자리를 두
+             화면에서 견줄 수 없었다. 여기서 같은 겹을 고를 수 있게 한다. -->
+        <select id="zslice"></select>
+        <div class="row">
+          <button id="tglFine">정밀 표시 (1m)</button>
+        </div>
+        <!-- 계산은 늘 1m 다. 이 스위치는 **표시**만 바꾼다. -->
+        <p class="hint">기본은 표시만 블록으로 묶는다. 켜면 손을 뗀 뒤 격자
+          그대로 그린다 — 한 장에 약 0.8초라 돌리는 동안은 여전히 굵게 그린다.</p>
+      </div>
+      <div class="row">
+        <button id="tglOcc" class="on">사람이 설 수 있는 자리만</button>
+        <!-- 히트맵이 현장을 덮어 무엇을 입력했는지 안 보인다. 벗겨 본다. -->
+        <button id="tglVox">현장만 보기</button>
+      </div>
+      <p class="hint">허공은 검출할 사람이 없어 지표의 분모에서 빠진다.
+        <b>현장만 보기</b>는 히트맵을 걷고 골조·가설물·위험구역·카메라만 남긴다 —
+        무엇을 놓고 재는지 확인하는 화면이며 지표는 그대로다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 도면과 지표 ────────────────────────────────────────────────── -->
+  <div>
+    <!-- 처음 여는 사람은 왼쪽 아코디언이 접혀 있으면 기능이 있는지도 모른다.
+         해야 할 순서를 화면 맨 위에 세워 두고, 지금 차례를 표시한다. -->
+    <ol class="steps" id="steps">
+      <!-- 누르면 아코디언만 열리는 것이 아니라 **보는 것까지** 바뀐다.
+           ①② 는 히트맵을 걷고 현장만, ③ 은 히트맵을 켠다. -->
+      <li data-step="in"><b>①</b> 현장 입력 <span class="st" id="stIn"></span></li>
+      <li data-step="cam"><b>②</b> 카메라 배치 <span class="st" id="stCam"></span></li>
+      <li data-step="view"><b>③</b> 히트맵 (평면) <span class="st" id="stRead"></span></li>
+      <li data-step="v3d"><b>④</b> 3D 커버리지 <span class="st" id="st3d"></span></li>
+    </ol>
+    <p id="stepHint"></p>
+
+    <div id="verdict"></div>
+    <div class="cards" id="cards"></div>
+    <div id="lastChange" hidden></div>
+
+    <div class="panel">
+      <!-- 평면 <-> 3D 는 자주 쓰는 조작이다. ④ 보기 아코디언 안에 두었더니
+           접힌 상태에서는 두 번 눌러야 했다. 캔버스 머리말로 뺀다. -->
+      <div class="viewhead">
+        <h2 id="viewTitle">현장 평면도 <span class="n" id="planNote"></span></h2>
+        <!-- 무엇을 칠하는가는 평면/3D 만큼 자주 쓰는 조작이다. ④ 보기 안에
+             두었더니 그 단이 접혀 있어 있는 줄도 몰랐다 (2026-08-23). -->
+        <select id="mapKind" title="캔버스에 무엇을 칠할지 고른다">
+          <option value="miss">취약도 지도 (위험 × 미검출)</option>
+          <option value="p">검출확률 지도</option>
+          <option value="vis">가시성 지도 (관측 대수)</option>
+          <option value="w">위험도 지도</option>
+        </select>
+        <button id="resetView" hidden>시점 초기화</button>
+        <span class="tabs" id="tabs">
+          <button data-tab="plan" class="on">평면 배치</button>
+          <button data-tab="v3d">3D 커버리지</button>
+        </span>
+      </div>
+      <div id="empty" class="callout" hidden></div>
+      <canvas id="plan" height="560"></canvas>
+      <canvas id="view3d" height="560" hidden></canvas>
+      <!-- 셋을 같은 상자로 그리지 않는다. 채우느냐 비우느냐가 구분의 축이다.
+           건설 목적물(실체) = 채운 면 · 가설물(부재) = 지주 눈금 ·
+           위험구역(라벨) = 빈 파선 테두리 -->
+      <div class="legend">
+        <span><b>도면</b></span>
+        <!-- 코어 안은 복셀이 없어 히트맵이 안 칠해진다. 붉은색(재봤더니 0)과
+             회색(재지 않았다)은 뜻이 다르므로 범례에서 갈라 준다. -->
+        <span title="승강로·계단실. 복셀을 만들지 않아 지표의 분모 밖이다"><span
+          class="sw" style="background:rgba(120,128,138,.30);
+          border:1px solid #78808a"></span>코어 벽체 <span
+          style="opacity:.7">(감시 대상 밖)</span></span>
+        <span><span class="sw" style="background:rgba(176,183,191,.10);
+          border:1px dashed #b0b7bf"></span>슬래브</span>
+        <span style="margin-left:8px"><b>입력</b></span>
+        <span><span class="sw" style="background:repeating-linear-gradient(90deg,
+          rgba(78,86,96,.9) 0 1px,transparent 1px 4px);border:1px solid rgba(78,86,96,.9)"></span>가설물</span>
+        <span><span class="sw" style="background:transparent;
+          border:1px dashed rgba(56,62,72,.7)"></span>위험구역</span>
+        <span id="placeLegend" style="margin-left:8px"><span class="sw"
+          style="background:rgba(56,62,72,.13);
+          border:1px solid var(--color-chrome)"></span>설치 가능</span>
+        <span style="margin-left:6px" id="heatLabel">검출확률</span>
+        <span id="heatLegend"></span>
+        <span class="pill" id="lodNote"></span>
+      </div>
+      <p class="hint" id="siteNote"></p>
+    </div>
+
+    <div class="panel">
+      <h2>이 화면이 재는 것</h2>
+      <p class="hint">
+        복셀 하나마다 카메라까지의 <b>거리(ρ 유효 픽셀밀도)</b> ·
+        <b>부감각(θ)</b> · <b>가림률(o)</b> 을 구하고, 실측 곡선
+        <code>P = f(ρ)·g(θ)·h(o)</code> 로 검출확률을 낸다. 여러 대가 겹치면
+        <code>1−Π(1−P)</code> 로 <b>올라간다</b> — 중첩은 이득이지 페널티가 아니다.
+      </p>
+      <p class="hint warn" id="limits"></p>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- 색의 단일 출처. tokens.css 를 읽어 캔버스용 RGB 로 낮춘다.
+     이것을 건너뛰고 각자 색을 적으면 조용히 어긋난다(theme.js 머리말). -->
+<script src="theme.js"></script>
+<script src="engine.js"></script>
+<script src="mounts.js"></script>
+<script src="place_viewer.js"></script>
+<!-- file:// 로 직접 열면 fetch 가 막힌다. site.js 는 site.json 과 같은 내용의
+     사본이며, 있으면 그것을 쓰고 fetch 하지 않는다. -->
+<script src="site.js" onerror="window.__noSiteJs = true"></script>
+<script>
+(function () {
+  'use strict';
+
+  var D = null, ENG = null, PLAN = null, V3D = null;
+  var VOX = null;                    // viewer.js 용 복셀 객체 배열 (한 번만 만든다)
+  var UI = { h: 7, k: 1, k3: null, onlyOcc: true, vox: true, fine: false,
+             map: 'miss', step: null, sel: -1, tab: 'plan' };
+  // 위험구역·가설물. **읽기 전용이다** — site.json 에서 받아 도면에 그리기만
+  // 한다. 값을 화면에서 만들지 않는다(위 '현장 입력' 머리말).
+  var IN = { zones: [], obstructions: [], mounts: [] };
+
+  /* 입력이 만든 **설치 자리**까지 합친 mounts.
+   *
+   * site.json 의 `mounts` 는 도면(코어·슬래브)에서만 유도된 것이다. 담당자가
+   * 넣은 것도 자리를 만든다 — 가설 펜스는 측면(선)을, 타워크레인은 점을.
+   * 종전에는 이 합치기가 없어 **예시를 불러와도 장비 자리가 한 번도 안 생겼다**
+   * (2026-08-23 확인).
+   *
+   * 설치 높이를 바꾸면 자리가 달라진다.
+   */
+  var MD = null;
+  function buildMounts() {
+    var M = JSON.parse(JSON.stringify(D.mounts));
+    IN.obstructions.forEach(function (b) {
+      // 펜스만 자리로 쓴다. 비계 클램프도 실무에는 있으나 근거를 확보하지
+      // 못했고, 지금 요구는 펜스다.
+      if (b.kind !== 'fence') return;
+      M.structure_side.faces.push({ kind: 'fence', z1: b.z1, z2: b.z2,
+                                    x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 });
+    });
+    IN.mounts.forEach(function (q) { M.equipment.points.push(q); });
+    MD = { site: D.site, mounts: M, solids: D.solids.concat(IN.obstructions) };
+  }
+
+  function fail(msg) {
+    var e = document.getElementById('err');
+    e.textContent = msg;
+    e.style.display = 'block';
+  }
+  function fmtPct(v) { return v == null ? '—' : (v * 100).toFixed(1) + '%'; }
+  function $(id) { return document.getElementById(id); }
+  function n0(v) { return Number(v).toLocaleString(); }
+
+  /* ── 방금 무엇이 달라졌는가 ────────────────────────────────────────────
+   * 입력을 그려도 지표만 조용히 바뀌어 알아채지 못했다. 바꾸기 **직전** 값을
+   * 들고 있다가 바뀐 뒤와 나란히 보여준다. 계산은 건드리지 않는다 —
+   * ENG.metrics() 가 이미 내놓는 값을 그대로 읽어 쓴다.
+   */
+  function snap() {
+    var m = ENG.metrics();
+    return { val: m[D.target_metric], fail: m.fail_voxels,
+             den: m.denominator_voxels, cov: m.spatial_coverage };
+  }
+  function note(head, before) {
+    var bits = [], a = before, b = snap();
+    if (a) {
+      if (a.val != null && b.val != null && Math.abs(b.val - a.val) > 5e-5)
+        bits.push('AI 유효 커버리지 ' + fmtPct(a.val) + ' → <b>' + fmtPct(b.val) + '</b>');
+      if (a.fail !== b.fail)
+        bits.push('미달 구역 ' + n0(a.fail) + ' → <b>' + n0(b.fail) + '</b>개');
+      if (a.den !== b.den)
+        bits.push('설 수 있는 자리 ' + n0(a.den) + ' → <b>' + n0(b.den) + '</b>개');
+    }
+    var el = $('lastChange');
+    el.className = 'change';
+    el.innerHTML = '<span class="t">방금</span> ' + head
+                 + (bits.length ? ' — ' + bits.join(' · ') : ' — 지표 변화 없음');
+    el.hidden = false;
+    void el.offsetWidth;                 // 애니메이션을 다시 태운다
+    el.className = 'change flash';
+  }
+
+  /* 한 번에 한 단만 편다 — 흐름을 따라 다음 단으로 옮겨 준다 */
+  function openAcc(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('.panel.acc'),
+      function (o) { o.classList.toggle('open', o.dataset.acc === name); });
+    if (PLAN) PLAN.resize();
+  }
+
+  /* 화면 흐름 — 현장만 → 카메라 배치 → 히트맵 (2026-08-22).
+   *
+   * 위 단계 띠는 종전에 **아코디언만 열었다.** 그래서 "무엇을 놓고 재는지"
+   * 와 "얼마나 보이는지" 가 늘 같은 화면에 겹쳐 나왔고, 히트맵이 켜져 있으면
+   * 입력한 위험구역·가설물이 붉은색에 파묻혀 보이지 않았다.
+   *
+   * 이제 단계가 **보는 것까지** 정한다.
+   *   ① 현장 입력   히트맵을 걷고 현장만 — 무엇을 넣었는지 확인한다
+   *   ② 카메라 배치  현장만인 채로 설치 가능 구역을 본다 — 어디에 놓을지 고른다
+   *   ③ 결과 확인   히트맵을 켠다 — 얼마나 보이는지 읽는다
+   *
+   * 되돌아가는 것도 자유다. 스위치를 직접 만져도 되고(④ 보기), 그때는 단계
+   * 표시만 어긋난 채로 둔다 — 흐름은 안내지 강제가 아니다.
+   */
+  function goStep(name) {
+    UI.step = name;
+    if (name === 'view' || name === 'v3d') {
+      if (!UI.vox) { UI.vox = true; syncTgl(); }      // 히트맵을 켠다
+      var want = name === 'v3d' ? 'v3d' : 'plan';
+      if (UI.tab !== want) setTab(want);
+    } else {
+      if (UI.vox) { UI.vox = false; syncTgl(); }      // 현장만
+      if (UI.tab !== 'plan') setTab('plan');          // 놓는 것은 평면에서만 된다
+    }
+    UI.step = name;                                   // setTab 이 덮어쓴다
+    openAcc(name === 'view' || name === 'v3d' ? 'view' : name);
+    if (UI.tab === 'plan') PLAN.draw(); else mount3d();
+    viewNote();
+    refresh();
+  }
+
+  /* 스위치의 눌린 표시를 상태에 맞춘다. 흐름이 상태를 바꿔도 버튼이 따라와야
+   * 한다 — 안 그러면 화면은 현장만인데 버튼은 안 눌린 것으로 보인다. */
+  function syncTgl() {
+    var tv = $('tglVox');
+    if (tv) tv.classList.toggle('on', !UI.vox);
+  }
+
+  /* 히트맵 색 — viewer.js 와 같은 스케일 (붉음 0 → 초록 1) */
+  /* 검출확률 램프. **theme.js 가 정본이다** - tokens.css 의 발산 램프를
+     읽는다. viewer.js 에는 옛 적→황→녹 램프가 남아 있는데, 그것은 적록색약
+     검증에서 미달↔통과 ΔE 4.1(구분 불가)로 떨어져 교체된 것이다. 여기서도
+     3D 에서도 theme 을 쓴다. */
+  var heat = null;
+  function rgba(c, al) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + al + ')'; }
+
+  /* ── 설치 가능 판정 — 규칙은 mounts.js 에 있다 ──────────────────────── */
+  function mountAt(h) { return Mounts.mountAt(MD, h); }
+  function placeable(x, y, h) { return Mounts.placeable(MD, x, y, h); }
+  function poleOK(x, y) { return Mounts.poleOK(MD, x, y); }
+
+  /* ── 평면도 ───────────────────────────────────────────────────────── */
+  function Plan(cv) {
+    this.cv = cv;
+    this.ctx = cv.getContext('2d');
+    var self = this;
+    cv.addEventListener('click', function (ev) { self.onClick(ev); });
+    addEventListener('resize', function () { self.resize(); }, { passive: true });
+    // **창 크기만으로는 부족하다.** 캔버스 폭은 창이 그대로여도 달라진다 —
+    // 입력을 불러와 표가 길어지면 세로 스크롤바가 생기면서 15px 좁아진다.
+    // 그때 resize 이벤트는 오지 않으므로 축척이 낡은 채로 남고, **첫 클릭이
+    // 약 0.9m 밀린다**(2026-08-23 실측: 목표 34.0 → 실제 33.1).
+    // 상자가 바뀌면 무조건 다시 잰다.
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(function () { self.resize(); }).observe(cv);
+    }
+    this.resize();
+  }
+  Plan.prototype.resize = function () {
+    var r = this.cv.getBoundingClientRect();
+    if (!r.width) return;                       // 숨겨져 있으면 나중에
+    var dpr = window.devicePixelRatio || 1;
+    this.cv.width = Math.max(1, Math.round(this.cv.clientWidth * dpr));
+    this.cv.height = Math.max(1, Math.round(this.cv.clientHeight * dpr));
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // **테두리를 빼고 잰다.** getBoundingClientRect 는 1px 테두리를 포함하는데
+    // 캔버스 좌표는 테두리 안쪽에서 시작한다. 종전에는 그 1px 만큼 화면과 좌표가
+    // 어긋나 클릭이 0.1m 쯤 밀렸다 (2026-08-23).
+    this.W = this.cv.clientWidth; this.H = this.cv.clientHeight;
+    var pad = 22;
+    this.s = Math.min((this.W - pad * 2) / D.site.width_m,
+                      (this.H - pad * 2) / D.site.depth_m);
+    this.ox = (this.W - D.site.width_m * this.s) / 2;
+    this.oy = (this.H - D.site.depth_m * this.s) / 2;
+    this.draw();
+  };
+  // 도면은 위가 +y 다. 화면 y 를 뒤집는다.
+  Plan.prototype.p = function (x, y) {
+    return { x: this.ox + x * this.s,
+             y: this.oy + (D.site.depth_m - y) * this.s };
+  };
+  Plan.prototype.inv = function (px, py) {
+    return { x: (px - this.ox) / this.s,
+             y: D.site.depth_m - (py - this.oy) / this.s };
+  };
+  Plan.prototype.onClick = function (ev) {
+    var r = this.cv.getBoundingClientRect();
+    // clientLeft/Top = 테두리 두께. 캔버스 좌표계의 원점은 그 안쪽이다.
+    var mx = ev.clientX - r.left - this.cv.clientLeft;
+    var my = ev.clientY - r.top - this.cv.clientTop;
+    for (var i = 0; i < ENG.cams.length; i++) {       // 놓인 것을 눌렀으면 선택
+      var q = this.p(ENG.cams[i].x, ENG.cams[i].y);
+      if (Math.hypot(mx - q.x, my - q.y) <= 9) { select(i); return; }
+    }
+    var w = this.inv(mx, my);
+    if (!placeable(w.x, w.y, UI.h)) return;
+    addCam(Math.round(w.x * 10) / 10, Math.round(w.y * 10) / 10, UI.h);
+  };
+
+  /* 위험구역·가설물은 도면 위에 **사각형으로 그린다.** 담당자가 아는 것을
+   * 직접 표시하는 것이지 도면에서 읽어내는 것이 아니다. */
+  Plan.prototype.bindDraw = function () {
+    var self = this, cv = this.cv;
+    function at(ev) {
+      var r = cv.getBoundingClientRect();
+      return self.inv(ev.clientX - r.left - cv.clientLeft,
+                      ev.clientY - r.top - cv.clientTop);
+    }
+    // 드래그로 위험구역을 그리던 흐름은 이 갈래에 없다 — 구역은 Python 이
+    // 골조에서 도출해 확정한다(위 '현장 입력' 머리말). 도면 위에서 하는 일은
+    // **카메라를 놓는 것 하나뿐**이라 클릭만 받는다.
+  };
+  Plan.prototype.draw = function () {
+    if (!this.s) { this.resize(); return; }
+    var ctx = this.ctx, S = D.site, self = this;
+    ctx.clearRect(0, 0, this.W, this.H);
+
+    var a = this.p(0, S.depth_m), b = this.p(S.width_m, 0);
+    ctx.strokeStyle = '#c9d0d8'; ctx.lineWidth = 1;
+    ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+
+    // 설치 가능 구역 — 그 높이에 성립하는 것을 **전부** 그린다 (2026-08-23).
+    // 종전에는 우선순위가 높은 하나만 그렸다. 6m 슬래브 위와 6m 폴은 현실에서
+    // 둘 다 가능한 자리인데 화면이 하나를 지우고 있었다.
+    //
+    // 자리의 모양이 방식마다 다르므로 그리는 법도 다르다 —
+    //   장비 위  점 (반경 1.5m)      구조물 상부  면
+    //   구조체 측면  테두리 **선**    폴  1m 격자 면
+    var m = mountAt(UI.h);
+    var FILL = 'rgba(56,62,72,.13)', LINE = 'rgba(56,62,72,.50)';
+    if (m.by.pole) {
+      ctx.fillStyle = FILL;
+      for (var y = 0; y < S.depth_m; y++) {
+        for (var x = 0; x < S.width_m; x++) {
+          if (!poleOK(x + .5, y + .5)) continue;
+          var q = this.p(x, y + 1);
+          ctx.fillRect(q.x, q.y, this.s + .6, this.s + .6);
+        }
+      }
+    }
+    if (m.by.structure_top) {
+      ctx.fillStyle = FILL;
+      ctx.strokeStyle = 'rgba(56,62,72,.45)';
+      m.by.structure_top.surfaces.forEach(function (s) {
+        var p1 = self.p(s.x1, s.y2), p2 = self.p(s.x2, s.y1);
+        ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+        ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+      });
+    }
+    if (m.by.structure_side) {
+      // 브래킷은 벽에 붙는다 — 면이 아니라 테두리가 자리다. 굵은 선으로 긋고
+      // 폭(band)만큼 얇게 채워 클릭할 수 있는 폭을 눈으로 보이게 한다.
+      var band = m.by.structure_side.band;
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = Math.max(2, band * 2 * self.s);
+      m.by.structure_side.faces.forEach(function (f) {
+        var p1 = self.p(f.x1, f.y2), p2 = self.p(f.x2, f.y1);
+        ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+      });
+      ctx.lineWidth = 1;
+    }
+    if (m.by.equipment) {
+      // 장비 위는 면이 아니라 점이다 — 입력으로 명시된 그 지점뿐이다
+      ctx.fillStyle = FILL;
+      ctx.strokeStyle = 'rgba(56,62,72,.55)';
+      m.by.equipment.points.forEach(function (q) {
+        var g = self.p(q.x, q.y);
+        ctx.beginPath(); ctx.arc(g.x, g.y, 1.5 * self.s, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      });
+    }
+
+    // 히트맵 — 선택한 **z 한 겹**.
+    //
+    // 종전에는 층(level)으로 걸렀는데 한 층이 z 세 겹(딛는 면 위 0.5·1.5·2.5m)
+    // 이라 같은 x·y 에 세 번 덧칠됐다. 배열이 z 오름차순이라 맨 위 겹이 이겼고,
+    // 그건 결정이 아니라 배열 순서가 정한 결과였다. 이제 한 칸이 정확히
+    // 복셀 하나다 — x·y·z 모두 1m (2026-08-22).
+    // 위험도 지도는 **카메라가 없어도** 그린다 — 무엇을 지켜야 하는지는 배치
+    // 이전에 봐야 하는 것이다. 검출확률은 카메라가 있어야 값이 생긴다.
+    var risk = UI.map === 'w', vis = UI.map === 'vis', miss = UI.map === 'miss';
+    if (UI.vox && (risk || miss || ENG.cams.length)) {
+      var p = (risk || vis) ? null : ENG.pTotal();   // miss 도 P 가 필요하다
+      var vc = vis ? ENG.visCount() : null;
+      var St = ENG.site, vs = St.s;
+      for (var t = 0; t < St.n; t++) {
+        if (Math.round((St.z[t] - vs / 2) / vs) !== UI.k) continue;
+        if (UI.onlyOcc && !St.occupiable[t]) continue;
+        var q2 = this.p(St.x[t] - vs / 2, St.y[t] + vs / 2);
+        if (risk) {
+          var w = St.w[t];
+          ctx.fillStyle = rgba(CoverageViewer.riskColor(w),
+                               0.25 + 0.5 * ((Math.min(5, w) - 1) / 4));
+        } else if (vis) {
+          var nv = vc[t];
+          ctx.fillStyle = rgba(CoverageViewer.visColor(nv),
+                               nv <= 0 ? 0.22 : 0.35 + 0.25 * Math.min(1, (nv - 1) / 2));
+        } else if (miss) {
+          /* 취약도 = w · (1−P) — **놓치고 있는 위험의 양**이다.
+           *
+           * w·P 가 아니라 w·(1−P) 인 이유: 전자는 잘 되고 있는 곳이 밝아진다.
+           * 찾아야 하는 것은 반대다. 그리고 이 값의 합이 곧 (1−WDR)·Σw 라
+           * **지도를 다 더하면 헤드라인 숫자가 된다** — 어느 칸이 그 숫자에
+           * 얼마나 기여했는지가 그대로 보인다.
+           *
+           * 눈금은 0~5 로 **고정한다.** 현장마다 최댓값으로 정규화하면 현장
+           * 사이를 비교할 수 없다. 0 인 칸은 칠하지 않는다 — 다 칠하면 밝은
+           * 곳이 묻힌다. 판정 임계를 쓰지 않으므로 임계값 0.5 에 결과가
+           * 매달리지 않는다는 것도 이 지도의 성질이다.
+           */
+          /* 알파를 선형으로 두면 **지도가 통째로 얼룩이 된다.** 위험구역
+             밖(w=1)이 전체 셀의 88% 인데 P=0 이면 m=1 이라 어디나 칠해진다.
+             감마를 걸어 낮은 쪽을 확실히 죽인다 - w1 은 속삭임, w10 은 선명. */
+          var m = St.w[t] * (1 - p[t]);
+          if (m < 0.5) continue;
+          var f = Math.pow(Math.min(1, m / MAXW), 1.7);
+          ctx.fillStyle = rgba(missColor(m), 0.10 + 0.74 * f);
+        } else {
+          ctx.fillStyle = rgba(heat(p[t]), 0.32 + 0.5 * (1 - p[t]));
+        }
+        ctx.fillRect(q2.x, q2.y, vs * this.s + .6, vs * this.s + .6);
+      }
+    }
+
+    // 건설 목적물 — 도면에 있는 것은 이것뿐이다.
+    // **회색으로 채우면 덩어리로 보인다.** 코어 벽체는 잘린 구조체이므로
+    // 도면 관례대로 45° 해칭으로, 슬래브는 판이라 파선 윤곽만 둔다.
+    D.solids.forEach(function (bx) {
+      var p1 = self.p(bx.x1, bx.y2), p2 = self.p(bx.x2, bx.y1);
+      var w = p2.x - p1.x, h = p2.y - p1.y;
+      ctx.save();
+      /* **사선으로 앉은 동을 눕혀 그리지 않는다** (2026-08-28).
+       *
+       * yaw_deg 는 계산에 줄곧 들어갔는데(engine.js 가 광선을 상자의 로컬
+       * 좌표로 돌려 푼다) 그리기만 축정렬로 남아 있었다. 404·405동이
+       * -24°/-27° 라, 화면에는 반듯한 건물이 서 있고 그 건물이 만드는
+       * 가림 그림자만 비스듬한 어긋남이 났다. plan.js·viewer.js 와 같은
+       * 수정이며 부호도 같아야 한다 — 화면 y 가 아래로 가므로 반대다. */
+      if (bx.yaw_deg) {
+        var rcx = p1.x + w / 2, rcy = p1.y + h / 2;
+        ctx.translate(rcx, rcy);
+        ctx.rotate(-bx.yaw_deg * Math.PI / 180);
+        ctx.translate(-rcx, -rcy);
+      }
+      if (bx.kind === 'core') {
+        // 코어는 12×16m 로 작아 진하게 그려도 히트맵을 조금만 가린다.
+        // 건물이 어디인지 세우는 기준이므로 옅게 깔고 해칭을 진하게 둔다.
+        ctx.fillStyle = 'rgba(92,100,110,.18)';
+        ctx.fillRect(p1.x, p1.y, w, h);
+        ctx.strokeStyle = '#2f353d'; ctx.lineWidth = 2.2;
+        ctx.strokeRect(p1.x, p1.y, w, h);
+        ctx.beginPath(); ctx.rect(p1.x, p1.y, w, h); ctx.clip();
+        ctx.strokeStyle = 'rgba(47,53,61,.7)'; ctx.lineWidth = 1.1;
+        for (var dd = -Math.abs(h); dd < w; dd += 7) {
+          ctx.beginPath(); ctx.moveTo(p1.x + dd, p1.y + h);
+          ctx.lineTo(p1.x + dd + h, p1.y); ctx.stroke();
+        }
+      } else {                                   // 슬래브 — 채우지 않고 선만 세운다
+        ctx.strokeStyle = 'rgba(76,84,94,.95)'; ctx.lineWidth = 1.8;
+        ctx.setLineDash([8, 5]);
+        ctx.strokeRect(p1.x, p1.y, w, h);
+      }
+      ctx.restore();
+    });
+
+    // 위험구역 — 골조에서 도출한 것이라 실체(벽·슬래브)와 색을 달리한다
+    var fz = -1, fo = -1;
+    // **실체가 아니라 영역 라벨이다.** 속을 채우지 않고 파선 테두리와 모서리
+    // 갈고리만 둔다. 채우면 실물 구조로 오해되고 히트맵도 덮는다.
+    IN.zones.forEach(function (z, i) {
+      var p1 = self.p(z.x1, z.y2), p2 = self.p(z.x2, z.y1);
+      var w = p2.x - p1.x, h = p2.y - p1.y;
+      ctx.save();
+      /* **색은 데이터에만.** 종전에는 붉은 파선이었는데 구역이 321개라
+         지도의 검출확률 램프와 색을 다퉜다. 잉크의 알파로 낮춘다 - 구역은
+         어디를 우선 보아야 하는지의 표시이지 측정값이 아니다. */
+      ctx.strokeStyle = 'rgba(56,62,72,.55)';
+      ctx.setLineDash([7, 4]); ctx.lineWidth = 1.3;
+      if (i === fz) { ctx.strokeStyle = 'rgba(30,34,40,.9)'; ctx.lineWidth = 3; }
+      if (z.poly) {                       // 사선 동의 테두리 - 회전한 다각형
+        ctx.beginPath();
+        z.poly.forEach(function (q, k) {
+          var t = self.p(q[0], q[1]);
+          if (k) ctx.lineTo(t.x, t.y); else ctx.moveTo(t.x, t.y);
+        });
+        ctx.closePath(); ctx.stroke();
+      } else {
+        ctx.strokeRect(p1.x, p1.y, w, h);
+      }
+      ctx.setLineDash([]);
+      var m = z.poly ? 0 : Math.min(9, Math.abs(w) / 3, Math.abs(h) / 3);
+      if (!z.poly) [[0, 0, 1, 1], [w, 0, -1, 1], [w, h, -1, -1], [0, h, 1, -1]].forEach(function (q) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x + q[0] + q[2] * m, p1.y + q[1]);
+        ctx.lineTo(p1.x + q[0], p1.y + q[1]);
+        ctx.lineTo(p1.x + q[0], p1.y + q[1] + q[3] * m);
+        ctx.stroke();
+      });
+      ctx.fillStyle = 'rgba(56,62,72,.72)'; ctx.font = '10px sans-serif';
+      ctx.fillText(zoneLabel(z), p1.x + 4, p1.y + 12);
+      ctx.restore();
+    });
+
+    // 입력한 가설물 — **면으로 채우지 않는다.**
+    // 비계는 판이 아니라 지주 다발이다. 1.8m 간격 눈금으로 그려 실체 있는
+    // 건설 목적물(채운 면)과 한눈에 갈리게 한다. 적치물은 덩어리라 빗금으로.
+    IN.obstructions.forEach(function (b, i) {
+      var p1 = self.p(b.x1, b.y2), p2 = self.p(b.x2, b.y1);
+      var w = p2.x - p1.x, h = p2.y - p1.y;
+      var hot = i === fo;
+      ctx.save();
+      ctx.strokeStyle = hot ? 'rgba(64,72,82,1)' : 'rgba(96,104,114,.85)';
+      ctx.lineWidth = hot ? 3 : 1.1;
+      ctx.strokeRect(p1.x, p1.y, w, h);
+      ctx.beginPath(); ctx.rect(p1.x, p1.y, w, h); ctx.clip();
+      ctx.lineWidth = 1;
+      if (b.kind === 'fence') {                   // 펜스 — 기둥 눈금이 촘촘한 선
+        ctx.strokeStyle = 'rgba(96,104,114,.75)';
+        var long = Math.abs(w) >= Math.abs(h);
+        var span = long ? Math.abs(w) : Math.abs(h);
+        var step = Math.max(4, span / 40);         // 기둥 2~3m 간격을 모사
+        for (var ff = 0; ff <= span; ff += step) {
+          ctx.beginPath();
+          if (long) { ctx.moveTo(p1.x + ff, p1.y); ctx.lineTo(p1.x + ff, p1.y + h); }
+          else { ctx.moveTo(p1.x, p1.y + ff); ctx.lineTo(p1.x + w, p1.y + ff); }
+          ctx.stroke();
+        }
+      } else if (b.kind === 'stack') {             // 적치물 — 빗금
+        ctx.strokeStyle = 'rgba(112,106,96,.6)';
+        for (var dd = -Math.abs(h); dd < w; dd += 6) {
+          ctx.beginPath(); ctx.moveTo(p1.x + dd, p1.y + h);
+          ctx.lineTo(p1.x + dd + h, p1.y); ctx.stroke();
+        }
+      } else {                                     // 비계 — 지주 눈금 1.8m
+        ctx.strokeStyle = 'rgba(96,104,114,.75)';
+        var step = Math.max(3, 1.8 * self.s);
+        if (Math.abs(w) >= Math.abs(h)) {
+          for (var x = 0; x <= Math.abs(w) + .1; x += step) {
+            ctx.beginPath(); ctx.moveTo(p1.x + x, p1.y);
+            ctx.lineTo(p1.x + x, p1.y + h); ctx.stroke();
+          }
+        } else {
+          for (var y = 0; y <= Math.abs(h) + .1; y += step) {
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y + y);
+            ctx.lineTo(p1.x + w, p1.y + y); ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
+    });
+
+    // 카메라와 화각 부채꼴
+    var half = D.camera.hfov_deg * Math.PI / 360, R = 18 * this.s;
+    ENG.cams.forEach(function (c, i) {
+      var g = self.p(c.x, c.y), ang = -c.yaw * Math.PI / 180;  // y 뒤집힘 보정
+      ctx.beginPath(); ctx.moveTo(g.x, g.y);
+      for (var t = -half; t <= half + 1e-6; t += half / 10) {
+        ctx.lineTo(g.x + R * Math.cos(ang + t), g.y + R * Math.sin(ang + t));
+      }
+      ctx.closePath();
+      /* 화각 부채꼴·카메라 표식은 **무채색이다**(tokens.css: 카메라·활성 탭).
+         파랑으로 두면 램프의 통과극(진파랑)과 같은 색이라, 지도에서 "잘
+         검출되는 칸"과 "카메라 자리"가 구분되지 않는다. 대비로 띄운다. */
+      ctx.fillStyle = i === UI.sel ? 'rgba(56,62,72,.20)' : 'rgba(56,62,72,.09)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(56,62,72,.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+      ctx.beginPath(); ctx.arc(g.x, g.y, i === UI.sel ? 7 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = i === UI.sel ? 'rgba(24,28,34,1)' : 'rgba(72,80,90,1)';
+      ctx.fill(); ctx.strokeStyle = 'rgba(252,253,254,.95)'; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.fillStyle = '#16191d'; ctx.font = '10px sans-serif';
+      ctx.fillText(String(i + 1), g.x + 9, g.y - 7);
+    });
+  };
+
+  /* ── 3D ───────────────────────────────────────────────────────────
+   * viewer.js 는 복셀 **객체 배열**을 받는다. 엔진은 형별 배열(Float64Array)로
+   * 들고 있으므로 한 번만 객체로 펴 두고, 배치가 바뀌면 P 값만 갈아끼운다.
+   * 매번 새로 만들면 79,392개 객체를 다시 할당하게 된다.
+   */
+  function voxObjects() {
+    if (VOX) return VOX;
+    var S = ENG.site;
+    VOX = new Array(S.n);
+    for (var t = 0; t < S.n; t++) {
+      var lv = S.level[t];
+      VOX[t] = { x: S.x[t], y: S.y[t], z: S.z[t], level: lv,
+                 floor_z: D.slab_levels_m[Math.min(lv, D.slab_levels_m.length - 1)],
+                 occupiable: !!S.occupiable[t], w: S.w[t],
+                 P_total_live: 0, vis: 0, miss: 0 };
+    }
+    return VOX;
+  }
+  function syncVox() {
+    var p = ENG.pTotal(), vc = ENG.visCount(), vs = voxObjects();
+    for (var t = 0; t < vs.length; t++) {
+      vs[t].P_total_live = p[t];
+      vs[t].vis = vc[t];             // 3D 가시성 지도가 읽는 값
+      vs[t].miss = vs[t].w * (1 - p[t]);   // 취약도 — 평면도와 같은 값이어야 한다
+    }
+    if (V3D) V3D.invalidate();     // 값이 바뀌었다 — 묶어둔 것을 버린다
+  }
+  function view3dData() {
+    return {
+      site: Object.assign({ z_max_m: D.rules.z_max_m }, D.site),
+      // 가설물은 입력이라 D.solids 에 없다. 3D 도 평면도와 같은 것을 봐야 한다.
+      solids: D.solids.concat(IN.obstructions),
+      zones: IN.zones,
+      voxels: voxObjects(), levels: D.levels,
+      aim: { hfov_deg: D.camera.hfov_deg },
+      cameras: ENG.cams.map(function (c, i) {
+        return { id: 'c' + (i + 1), x: c.x, y: c.y, z: c.z, yaw_deg: c.yaw };
+      }),
+    };
+  }
+
+  /* ── 현장 입력 ────────────────────────────────────────────────────── */
+  /*
+   * **이 갈래에서 위험구역은 화면에서 그리지 않는다** (2026-08-27).
+   *
+   * 팀원 갈래에서는 담당자가 도면 위에 사각형을 드래그해 위험구역과 가설물을
+   * 넣고, 브라우저가 `site_rules.js` 로 복셀 성질을 다시 계산했다. 그 파일은
+   * 그쪽 `site_model.py` 를 옮긴 것인데, 이 갈래의 `site_model.py` 와 566줄이
+   * 갈려 있다. 두 벌의 규칙이 생기면 화면과 보고서가 다른 말을 하게 된다.
+   *
+   * 그래서 위험구역은 **Python 이 골조에서 도출해 확정한 것**(`zone_derive.py`,
+   * 84개)을 `site.json` 으로 받아 **읽기만 한다.** 근거와 등급(T1/T2)이 붙어
+   * 있어 손으로 그린 사각형보다 방어하기 좋다. 브라우저가 실시간으로 계산하는
+   * 것은 **카메라 배치 하나뿐**이다.
+   *
+   * 화면에서 직접 그리는 흐름은 도면 입력 도구(2D→2.5D)를 만들 때 그쪽에
+   * 붙인다 — 그것이 이 기능의 제자리다.
+   */
+
+  /* 프리셋 높이 버튼 — 설치 가능 자리에서 나오는 높이들. */
+  /* 범례 — 지도에 따라 눈금이 달라진다. 검출확률은 0~1, 위험도는 1~5. */
+  function fillHeatLegend() {
+    var k = UI.map;
+    var LBL = { p: '검출확률', vis: '관측 대수', w: '위험도',
+                miss: '취약도 w·(1−P)' };
+    var TICKS = { p: [0, .25, .5, .75, 1], vis: [0, 1, 2, 3], w: [1, 2, 3, 4, 5],
+                  miss: [0, .25, .5, .75, 1].map(function (f) {
+                    return Math.round(f * MAXW * 10) / 10; }) };
+    $('heatLabel').textContent = LBL[k];
+    $('heatLegend').innerHTML = TICKS[k].map(function (v) {
+      var c = k === 'miss' ? missColor(v)
+            : k === 'w' ? CoverageViewer.riskColor(v)
+            : k === 'vis' ? CoverageViewer.visColor(v) : heat(v);
+      var t = k === 'w' ? 'w' + v
+            : k === 'miss' ? v.toFixed(0)
+            : k === 'vis' ? (v === 0 ? '없음' : v === 3 ? '3+' : v + '대')
+            : v.toFixed(2);
+      return '<span class="sw" style="background:' + rgba(c, 1) + '"></span>' + t;
+    }).join(' ');
+  }
+
+  function fillPresets() {
+    var pr = $('presets');
+    if (!pr) return;
+    pr.innerHTML = Mounts.presetHeights(MD).map(function (h) {
+      return '<button data-h="' + h + '">' + h + 'm</button>';
+    }).join('');
+  }
+
+  var ZONE_KO = {
+    gangform_workface: '갱폼 작업면', opening_perimeter: '개구부 주변',
+    lift_landing: '리프트 승강구', tower_crane_radius: '타워크레인 반경',
+    material_yard: '자재 야적장', slab_edge: '슬래브 단부',
+    concrete_pour: '콘크리트 타설',
+    scaffold: '외곽 비계', stack: '적치물', fence: '가설 펜스',
+  };
+
+  /* 도면에 적을 이름. `zone_derive.py` 가 라벨을 붙여 보내지만 층까지 달려
+   * 길어지므로(`슬래브 단부 (EL 2.9m)`) 도면에는 짧은 이름을 쓴다. */
+  function zoneLabel(z) { return ZONE_KO[z.name] || z.label || z.name; }
+
+  /* 취약도 눈금의 상한 = 이 현장의 **최대 위험가중치**.
+   * 5 로 박아 두었더니 w10 짜리 구역에서 지도가 통째로 포화됐다. 지수 표를
+   * 갈아끼우면 가중치 범위도 달라지므로 값에서 구한다. */
+  var MAXW = 5;
+  function maxWeight() {
+    var S = ENG.site, m = 1;
+    for (var t = 0; t < S.n; t++) if (S.w[t] > m) m = S.w[t];
+    return m;
+  }
+  /* 취약도 색 - 위험도 배지 토큰(w4 호박 → w5 진홍) 사이를 잇는다.
+   *
+   * 검출확률 램프를 쓰면 안 된다. 취약도가 높은 곳은 램프의 미달극과 같은
+   * 붉은색이 되는데, 두 지도가 **정반대를 뜻하면서 똑같이 보인다.**
+   * 상태색은 예약이며 램프와 겹치지 않는다(tokens.css). */
+  function missColor(m) {
+    var a = Theme.ui('--color-w4'), b = Theme.ui('--color-w5');
+    var t = Math.max(0, Math.min(1, m / MAXW));
+    return [Math.round(a[0] + (b[0] - a[0]) * t),
+            Math.round(a[1] + (b[1] - a[1]) * t),
+            Math.round(a[2] + (b[2] - a[2]) * t)];
+  }
+
+  /* 위험구역을 종류별로 묶는다. `zone_derive.py` 가 한 종류를 동마다·층마다
+   * 따로 내므로(슬래브 단부만 수십 개다) 낱개로 늘어놓으면 읽을 수 없다. */
+  function zoneGroups() {
+    var by = {};
+    (D.zones || []).forEach(function (z) {
+      var g = by[z.name] || (by[z.name] = {
+        name: z.name, label: ZONE_KO[z.name] || z.label || z.name,
+        n: 0, w: z.weight, tier: z.tier, source: z.source,
+      });
+      g.n++;
+      if (z.weight > g.w) g.w = z.weight;   // 겹치면 보수적으로 큰 쪽
+    });
+    return Object.keys(by).map(function (k) { return by[k]; })
+      .sort(function (a, b) { return b.w - a.w || b.n - a.n; });
+  }
+
+  function renderInputs() {
+    var gs = zoneGroups();
+    var n = (D.zones || []).length;
+    $('inputCount').textContent = n ? gs.length + '종 · ' + n + '개소' : '없음';
+    var tb = document.querySelector('#inputTable tbody');
+    tb.innerHTML = !n
+      ? '<tr><td style="color:var(--dim)">위험구역이 없다. 모든 자리의 가중치가 1이다.</td></tr>'
+      : gs.map(function (g) {
+          return '<tr>'
+            + '<td>' + g.label + '</td>'
+            + '<td class="num">' + g.n + '개소</td>'
+            + '<td class="num">w' + g.w + '</td>'
+            + '<td style="color:var(--dim);font-size:11px">' + (g.tier || '') + '</td>'
+            + '</tr>';
+        }).join('');
+  }
+
+  /* ── 상태 ─────────────────────────────────────────────────────────── */
+  function addCam(x, y, z) {
+    var before = snap(), first = ENG.cams.length === 0;
+    // 벽에 붙였으면 **브래킷으로 내밀어** 벽 바깥을 보게 놓는다.
+    // 벽선에 딱 붙이면 광선의 끝점이 벽체 표면이라 모든 쌍이 완전 차폐로
+    // 잡혀 아무것도 못 본다(코어 서벽에서 occ 1.000, 0.5m 띄우면 0.091).
+    var kind = Mounts.kindAt(MD, x, y, z);
+    var yaw = 0, off = null;
+    if (kind === 'structure_side') {
+      off = Mounts.sideMount(MD, x, y, z);
+      if (off) { x = off.x; y = off.y; yaw = off.yaw; }
+    }
+    ENG.add({ x: x, y: y, z: z, yaw: yaw });
+    UI.sel = ENG.cams.length - 1;
+    refresh();
+    note('카메라 ' + ENG.cams.length + '번 놓음 · ' + x + ', ' + y
+         + ' · 높이 ' + z + 'm · ' + (Mounts.KO[kind] || '자리 미상')
+         + (off ? ' · 벽에서 ' + off.offset_m + 'm 내밀어 방위 ' + yaw + '°' : ''),
+         before);
+    // 첫 대를 놓으면 결과로 넘어간다. 현장만인 채로 두면 카메라를 놓아도
+    // 화면이 그대로라 "놓았는데 아무 일도 안 일어난다" 로 읽힌다.
+    if (first) goStep('view');
+  }
+  function select(i) { UI.sel = i; refresh(); }
+  function setYaw(deg) {
+    if (UI.sel < 0) return;
+    var before = snap();
+    var c = ENG.cams[UI.sel];
+    ENG.remove(UI.sel);
+    ENG.add({ x: c.x, y: c.y, z: c.z, yaw: deg });
+    UI.sel = ENG.cams.length - 1;    // 다시 넣었으므로 맨 뒤로 간다
+    refresh();
+    note('카메라 방위 ' + deg + '°', before);
+  }
+
+  function card(k, v, n, cls) {
+    return '<div class="card ' + (cls || '') + '"><div class="k">' + k
+         + '</div><div class="v">' + v + '</div><div class="n">' + (n || '')
+         + '</div></div>';
+  }
+
+  /* ── 안내 ──────────────────────────────────────────────────────────────
+   * 기능은 다 있었는데 쓰는 법이 안 보였다. 지금 어느 차례인지 · 도면에서
+   * 무엇을 해야 하는지를 화면이 스스로 말하게 한다. 계산에는 관여하지 않는다.
+   */
+  function guide(placed) {
+    var nIn = IN.zones.length + IN.obstructions.length;
+    // 사용자가 단계를 직접 눌렀으면 그것이 지금이다. 안 눌렀으면 상태에서
+    // 짐작한다. 종전에는 짐작만 했고, 그래서 ② 로 되돌아가 현장만 보고 있는데도
+    // 띠는 ③ 을 가리켰다.
+    var now = UI.step || (!placed ? (nIn ? 'cam' : 'in') : 'view');
+
+    var st = {
+      in: nIn ? { c: 'done', t: '✓ ' + nIn + '건' }
+              : (now === 'in' ? { c: 'now', t: '▶ 지금' }
+                              : { c: '', t: '건너뜀' }),
+      cam: placed ? { c: 'done', t: '✓ ' + ENG.cams.length + '대' }
+                  : (now === 'cam' ? { c: 'now', t: '▶ 지금' }
+                                   : { c: '', t: '대기' }),
+      view: placed ? { c: 'now', t: '▶ 갱신됨' } : { c: '', t: '대기' },
+      v3d: placed ? { c: '', t: '부피로 본다' } : { c: '', t: '대기' },
+    };
+    // 지금 보고 있는 단계에 표시를 옮긴다. 끝낸 단계로 되돌아가도 '지금' 이다.
+    ['in', 'cam', 'view', 'v3d'].forEach(function (k) {
+      if (st[k].c === 'now') st[k].c = '';
+    });
+    st[now].c = 'now';
+    Array.prototype.forEach.call($('steps').children, function (li) {
+      var s = st[li.dataset.step];
+      li.className = s.c;
+      if (s.c === 'now') li.setAttribute('aria-current', 'step');
+      else li.removeAttribute('aria-current');
+    });
+    var ex = D.excluded || {};
+    $('planNote').textContent =
+      D.site.width_m + '×' + D.site.depth_m + 'm · 복셀 ' + D.site.voxel_m + 'm · '
+      + '사람이 설 수 있는 자리 ' + n0(ENG.site.liveCount) + ' / ' + n0(ENG.site.n)
+      + (ex.count ? ' · 감시 대상 밖 ' + n0(ex.count) : '');
+    $('siteNote').innerHTML =
+      '골조는 <b>실제 도면에서 옮긴 것</b>이다 — 신내역 금강펜테리움 센트럴파크 '
+      + '건축물현황도(세움터 발급)와 종합가설계획도를 축척 1:2000 으로 읽었다. '
+      + '5개 동 전부와 부대시설이 들어 있고, 사선으로 앉은 두 동은 각도 그대로 넣었다. '
+      + '<b>단, 카메라 배치는 실제 계획서가 아니라 이 화면에서 사용자가 놓는 것이다.</b> '
+      + '위험구역 ' + n0(IN.zones.length) + '개소는 골조 형상에서 도출했고'
+      + '(슬래브 단부·개구부 주변 등), 가림원에는 코어 벽체·슬래브와 함께 '
+      + '비계·적치물·펜스가 들어가 있다.'
+      // 분모 밖에 무엇이 얼마나 있는지 밝힌다. 빼는 것보다 빼놓고 말하지 않는
+      // 것이 문제다.
+      + (ex.count
+         ? ' <b>골조 안 ' + n0(ex.count) + '칸은 복셀을 만들지 않는다</b> — '
+           + '코어는 승강로·계단실이라 CCTV 로 볼 수 없어 <b>MVP 에서 감시 대상 '
+           + '밖으로 둔다.</b> 실내 커버리지는 재지 않았다.'
+         : '');
+
+    $('stIn').textContent = st.in.t;
+    $('stCam').textContent = st.cam.t;
+    $('stRead').textContent = st.view.t;
+    $('st3d').textContent = st.v3d.t;
+
+    $('stepHint').innerHTML =
+      now === 'in'
+        ? '위험구역·가설물은 도면에서 오지 않는다. <b>① 현장 입력</b>에서 종류를 고르고 '
+          + '도면 위를 드래그해 그린다 — 건너뛰고 바로 카메라를 놓아도 된다.'
+      : now === 'cam'
+        ? '지금은 <b>현장만</b> 보고 있다 — 히트맵을 걷어 무엇을 놓고 재는지 '
+          + '드러낸 화면이다. 도면의 <b>파란 구역</b>(설치 가능)을 클릭하면 그 자리에 '
+          + '카메라가 놓이고, 그때 히트맵으로 넘어간다.'
+      : now === 'v3d'
+        ? '같은 계산을 <b>부피</b>로 본다. 드래그로 돌리고, <b>④ 보기</b>의 '
+          + '<b>보이는 높이</b>에서 z 1m 한 겹만 골라 평면과 같은 겹을 견줄 수 있다.'
+        : '카메라를 놓거나 옮길 때마다 판정·히트맵이 즉시 다시 계산된다. '
+          + '<b>④ 3D 커버리지</b>로 넘어가면 같은 계산을 부피로 본다. '
+          + '<b>① ②</b> 를 누르면 히트맵을 걷고 현장만 다시 볼 수 있다.';
+
+    // 텅 빈 첫 화면 — 무엇부터 할지 도면 바로 위에서 말한다
+    var em = $('empty');
+    em.hidden = placed || UI.tab !== 'plan';   // 3D 에서는 클릭해 놓을 수 없다
+    if (!em.hidden) {
+      em.innerHTML = nIn
+        ? '<span class="t">다음 — 카메라를 놓는다</span>'
+          + '입력 ' + nIn + '건이 반영됐다. 도면에서 <b>파란 구역</b>을 클릭하면 '
+          + '설치 높이 ' + UI.h + 'm 로 카메라가 놓이고, 그 즉시 검출확률이 계산된다.'
+        : '<span class="t">시작하기 — 아직 아무것도 놓이지 않았다</span>'
+          + '<ol><li><b>현장 입력</b>(선택) — 아래 <b>예시 불러오기</b>를 누르거나, '
+          + '<b>위험구역 그리기</b>로 도면 위를 드래그해 직접 그린다.</li>'
+          + '<li><b>카메라 배치</b> — 도면의 <b>파란 구역</b>을 클릭하면 그 자리에 '
+          + '카메라가 놓인다.</li>'
+          + '<li><b>결과 확인</b> — 판정·히트맵이 즉시 다시 계산된다.</li></ol>'
+          + '<div class="row"><button data-go="preset">예시 불러오기</button>'
+          + '<button data-go="zone">위험구역 그리기</button>'
+          + '<button data-go="obst">가설물 그리기</button></div>';
+    }
+  }
+
+  /* 그리기 모드일 때 도면 옆에서 무엇을 해야 하는지 말한다 */
+  function refresh() {
+    var m = ENG.metrics(), val = m[D.target_metric];
+    var placed = ENG.cams.length > 0;
+    var pass = placed && val != null && val >= D.target;
+
+    // 판정은 카드 다섯 중 하나로 두면 묻힌다. 따로 세운다.
+    var gap = placed && val != null ? val - D.target : null;
+    $('verdict').innerHTML =
+      '<div class="verdict ' + (placed ? (pass ? 'pass' : 'fail') : '') + '">'
+      + '<div class="big">' + (placed ? (pass ? '통과' : '미달') : '—') + '</div>'
+      + '<div><div class="val">' + (placed ? fmtPct(val) : '—') + '</div>'
+      + '<div class="meta">AI 유효 커버리지 (위험가중 · 임계 P≥' + D.threshold + ')</div></div>'
+      + '<div class="bar" title="목표 ' + fmtPct(D.target) + '"><i style="width:'
+      + (placed && val != null ? Math.min(100, val / D.target * 100) : 0) + '%"></i></div>'
+      + '<div class="meta" style="text-align:right;white-space:nowrap">목표 '
+      + fmtPct(D.target)
+      + (gap != null ? '<br>' + (gap >= 0 ? '+' : '') + (gap * 100).toFixed(1) + '%p' : '')
+      + (D.target_source === 'proposed_provisional'
+         ? '<br><span class="warn">※ LH 고시값 아님</span>' : '')
+      + '</div></div>';
+
+    $('cards').innerHTML =
+      card('공간 커버리지', placed ? fmtPct(m.spatial_coverage) : '—',
+           m.covered_voxels.toLocaleString() + ' / '
+           + m.denominator_voxels.toLocaleString() + ' 복셀') +
+      card('기대 검출률 (WDR)', placed ? fmtPct(m.WDR) : '—', '임계 없는 기대값') +
+      card('미달 구역', m.fail_voxels.toLocaleString() + '개',
+           '검출확률 ' + D.threshold + ' 미만') +
+      card('설 수 있는 자리', m.denominator_voxels.toLocaleString() + '개',
+           (D.excluded && D.excluded.count)
+             ? '지표의 분모 · 감시 대상 밖 ' + n0(D.excluded.count) + '칸 제외'
+             : '전체 복셀 중 지표의 분모');
+
+    $('camCount').textContent = placed ? ENG.cams.length + '대' : '없음';
+
+    var tb = document.querySelector('#camTable tbody');
+    tb.innerHTML = !placed
+      ? '<tr><td style="color:var(--dim)">아직 없다. 평면도를 클릭해 놓는다.</td></tr>'
+      : '<tr><th>#</th><th>위치</th><th class="num">높이</th>'
+        + '<th class="num">방위</th><th></th></tr>'
+        + ENG.cams.map(function (c, i) {
+            return '<tr class="camrow' + (i === UI.sel ? ' sel' : '')
+              + '" data-i="' + i + '"><td>' + (i + 1) + '</td>'
+              + '<td>' + c.x.toFixed(1) + ', ' + c.y.toFixed(1) + '</td>'
+              + '<td class="num">' + c.z + 'm</td>'
+              + '<td class="num">' + c.yaw + '°</td>'
+              + '<td><button data-del="' + i + '">×</button></td></tr>';
+          }).join('');
+
+    $('aim').hidden = UI.sel < 0;
+    if (UI.sel >= 0) {
+      $('yaw').value = ENG.cams[UI.sel].yaw;
+      $('yawVal').textContent = ENG.cams[UI.sel].yaw + '°';
+    }
+
+    renderInputs();
+    guide(placed);
+    $('camCount').textContent = placed ? ENG.cams.length + '대' : '없음';
+    viewNote();
+    syncVox();
+    if (UI.tab === 'plan') PLAN.draw();
+    else mount3d();
+  }
+
+  function mount3d() {
+    var cv = $('view3d');
+    var opts = {
+      key: UI.map === 'w' ? 'w' : UI.map === 'vis' ? 'vis'
+           : UI.map === 'miss' ? 'miss' : 'P_total_live',
+      missMax: MAXW,
+      showCams: true, showSolids: true,
+      onlyOccupiable: UI.onlyOcc, fine: UI.fine, zSlice: UI.k3,
+      showVoxels: UI.vox,
+      cameraIds: ENG.cams.map(function (c, i) { return 'c' + (i + 1); }),
+    };
+    // 다시 만들지 않는다 — 생성자가 resize 와 LOD 재생성을 부른다.
+    // 보던 각도와 확대도 유지된다.
+    if (!V3D) V3D = new CoverageViewer.Viewer(cv, view3dData(), opts);
+    else V3D.setData(view3dData(), opts);
+    var s = V3D.drawScale(), g = D.site.voxel_m;
+    $('lodNote').textContent =
+      UI.k3 !== null ? 'z ' + UI.k3 + '~' + (UI.k3 + g) + 'm 한 겹 · ' + g + 'm 그대로'
+      : s > g ? '표시 ' + s + 'm 블록 · 계산 ' + g + 'm'
+      : '표시 · 계산 모두 ' + g + 'm';
+  }
+
+  /* 접힌 ④ 보기 헤더에 남는 요약. refresh 뿐 아니라 **탭을 바꿀 때도** 갱신해야
+   * 한다 — 3D 탭인데 "평면 · 1층" 이라고 적혀 있던 결함이 그래서 났다. */
+  function viewNote() {
+    $('viewNote').textContent =
+      (UI.tab === 'plan' ? '평면 · z ' + UI.k + '~' + (UI.k + 1) + 'm'
+                         : '3D 회전'
+                           + (UI.k3 !== null ? ' · z ' + UI.k3 + '~' + (UI.k3 + 1) + 'm'
+                                             : UI.fine ? ' · 정밀' : ''))
+      + (UI.onlyOcc ? '' : ' · 허공 포함')
+      + (UI.vox ? '' : ' · 현장만')
+      + (UI.map === 'w' ? ' · 위험도' : UI.map === 'vis' ? ' · 가시성'
+         : UI.map === 'miss' ? ' · 취약도' : '');
+  }
+
+  function setTab(name) {
+    UI.tab = name;
+    // 캔버스 머리말의 탭을 직접 눌러도 단계 표시가 따라와야 한다 — 안 그러면
+    // 3D 를 보고 있는데 띠는 ③ 평면을 가리킨다.
+    if (UI.step === 'view' || UI.step === 'v3d') UI.step = name === 'v3d' ? 'v3d' : 'view';
+    $('plan').hidden = name !== 'plan';
+    $('view3d').hidden = name !== 'v3d';
+    $('planOpts').hidden = name !== 'plan';
+    $('v3dOpts').hidden = name !== 'v3d';
+    $('placeLegend').style.display = name === 'plan' ? '' : 'none';
+    $('resetView').hidden = name === 'plan';
+    $('viewTitle').firstChild.nodeValue =
+      name === 'plan' ? '현장 평면도 ' : '3D 커버리지 ';
+    Array.prototype.forEach.call($('tabs').children, function (b) {
+      b.classList.toggle('on', b.dataset.tab === name);
+    });
+    guide(ENG.cams.length > 0);
+    viewNote();
+    if (name === 'plan') { PLAN.resize(); } else { mount3d(); }
+    $('lodNote').textContent = name === 'plan' ? '' : $('lodNote').textContent;
+  }
+
+  var MOUNT_KO = { pole: '폴', structure_top: '구조물 상부', equipment: '가설 장비' };
+  function setH(h) {
+    UI.h = h;
+    var m = mountAt(h);
+    var el = $('mountHint');
+    el.textContent = m.note;
+    el.className = 'hint' + (m.kinds.length ? '' : ' warn');
+    $('hNote').textContent = h + 'm · '
+      + (m.kinds.length ? m.kinds.map(function (k) { return Mounts.KO[k]; }).join(' · ')
+                        : '설치 불가');
+    if (ENG) guide(ENG.cams.length > 0);      // 빈 화면 안내가 높이를 인용한다
+    if (UI.tab === 'plan') PLAN.draw();
+  }
+
+  /* ── 시작 ─────────────────────────────────────────────────────────── */
+  function show(d) {
+    if (!d || d.status !== 'ok') throw new Error('site.json 의 status 가 ok 가 아니다');
+    D = d;
+    heat = Theme.heat;
+    $('app').hidden = false;
+
+    /* 위험구역을 그리기용 사각형으로 편다.
+     *
+     * `zone_derive.py` 는 한 구역을 `areas` 목록으로 낸다 — 슬래브 단부가
+     * 동마다·층마다 따로 있는 식이다. 도면에 그리는 쪽은 사각형 하나씩을
+     * 기대하므로 여기서 펴 준다. **읽기 전용이다** — 값을 화면에서 만들지
+     * 않는다(가중치는 Python 이 이미 복셀에 넣었다). */
+    IN.zones = (d.zones || []).reduce(function (acc, z) {
+      (z.areas || []).forEach(function (a) {
+        /* **구역은 사각형만이 아니다.** 회전한 상자의 테두리는 사각형으로
+           표현할 수 없어 zone_derive 가 다각형(점 4개)으로 낸다. 사각형으로
+           가정하고 a[0]..a[3] 을 읽으면 a[0] 이 [x,y] 배열이라 NaN 이 되고
+           **그 구역이 화면에서 사라진다** - 343개 중 119개가 그랬다. */
+        var poly = Array.isArray(a[0]);
+        var e = { name: z.name, label: z.label, weight: z.weight,
+                  tier: z.tier, source: z.source, z1: z.z_min, z2: z.z_max };
+        if (poly) {
+          e.poly = a;
+          var xs = a.map(function (q) { return q[0]; });
+          var ys = a.map(function (q) { return q[1]; });
+          e.x1 = Math.min.apply(null, xs); e.x2 = Math.max.apply(null, xs);
+          e.y1 = Math.min.apply(null, ys); e.y2 = Math.max.apply(null, ys);
+        } else {
+          e.x1 = a[0]; e.y1 = a[1]; e.x2 = a[2]; e.y2 = a[3];
+        }
+        acc.push(e);
+      });
+      return acc;
+    }, []);
+    // 가설물은 이미 D.solids 안에 있다(비계·적치물·펜스). 따로 얹지 않는다.
+    IN.obstructions = [];
+
+    $('inputState').textContent =
+      '현장 = 건설 목적물 + 가설물 · 위험구역 ' + IN.zones.length + '개소';
+    $('curveState').textContent =
+      '곡선 ' + d.curve.detector + ' · ' + d.curve.target
+      + ' · ρ축 실측 R² ' + d.curve.r2_rho_native;
+
+    ENG = new CoverageEngine.Engine(d);
+    MAXW = maxWeight();
+    buildMounts();
+
+    // z 한 겹씩 고른다. 사람이 설 수 있는 복셀이 하나도 없는 겹은 빼되,
+    // 몇 개인지는 함께 보여 준다 — 빈 겹을 고르고 "왜 아무것도 없지" 하지
+    // 않도록.
+    var lv = $('level');
+    var St0 = ENG.site, vs0 = St0.s;
+    var cnt = {};
+    for (var t0 = 0; t0 < St0.n; t0++) {
+      if (!St0.occupiable[t0]) continue;
+      var k0 = Math.round((St0.z[t0] - vs0 / 2) / vs0);
+      cnt[k0] = (cnt[k0] || 0) + 1;
+    }
+    var ks = Object.keys(cnt).map(Number).sort(function (a, b) { return a - b; });
+    lv.innerHTML = ks.map(function (k) {
+      return '<option value="' + k + '">z ' + (k * vs0) + '~' + ((k + 1) * vs0)
+           + 'm · 설 자리 ' + cnt[k].toLocaleString() + '</option>';
+    }).join('');
+    // 기본은 z 1~2m — 1.7m 사람의 머리가 드는 겹이다.
+    if (ks.indexOf(UI.k) < 0) UI.k = ks[0];
+    lv.value = String(UI.k);
+    lv.onchange = function () { UI.k = +lv.value; PLAN.draw(); viewNote(); };
+
+    // 3D 는 부피 전부가 기본이고, 같은 겹을 골라 평면과 견줄 수 있게 한다.
+    var zs = $('zslice');
+    zs.innerHTML = '<option value="">전체 높이</option>'
+      + ks.map(function (k) {
+          return '<option value="' + k + '">z ' + (k * vs0) + '~' + ((k + 1) * vs0)
+               + 'm 한 겹</option>';
+        }).join('');
+    zs.onchange = function () {
+      UI.k3 = zs.value === '' ? null : +zs.value;
+      if (UI.tab === 'v3d') mount3d();
+      viewNote();
+    };
+
+    var pr = $('presets');
+    fillPresets();
+    pr.onclick = function (e) {
+      if (!e.target.dataset.h) return;
+      $('h').value = e.target.dataset.h;
+      setH(+e.target.dataset.h);
+    };
+
+    $('h').oninput = function () { setH(+this.value); };
+    $('yaw').oninput = function () { $('yawVal').textContent = this.value + '°'; };
+    $('yaw').onchange = function () { setYaw(+this.value); };
+    /* 놓은 배치를 CCTV 계획서(JSON)로 내보낸다.
+     *
+     * 이것이 있어야 화면과 보고서가 **같은 배치**를 잰다. 종전에는 제안서용
+     * 기준 배치를 손으로 좌표를 적어 만들었는데, 그러면 화면에서 확인한 것과
+     * 다른 배치가 보고서에 실릴 수 있었다. 계약은 src/plan_io.py 가 정의한다. */
+    $('exportPlan').onclick = function () {
+      if (!ENG.cams.length) { note('놓은 카메라가 없다', snap()); return; }
+      var doc = {
+        _about: 'CCTV 계획서 (BIGB 입력 계약) — 배치 화면에서 내보냄',
+        _note: '설치 높이 ' + UI.h + 'm · ' + ENG.cams.length + '대. '
+             + 'src/plan_io.py 가 읽는다',
+        site: { width_m: D.site.width_m, depth_m: D.site.depth_m },
+        cameras: ENG.cams.map(function (c, i) {
+          return { id: 'c_u' + String(i + 1).padStart(3, '0'),
+                   x: c.x, y: c.y, z: c.z, yaw_deg: c.yaw,
+                   hfov_deg: D.camera.hfov_deg,
+                   img_w: D.camera.img_w, img_h: D.camera.img_h,
+                   mount: c.mount || 'plan' };
+        }),
+      };
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 1)],
+                                            { type: 'application/json' }));
+      a.download = 'as_planned.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      note('계획서 <b>as_planned.json</b> 내보냄 · ' + ENG.cams.length + '대', snap());
+    };
+    $('clear').onclick = function () {
+      if (!ENG.cams.length) return;
+      var before = snap(), n = ENG.cams.length;
+      while (ENG.cams.length) ENG.remove(ENG.cams.length - 1);
+      UI.sel = -1; refresh();
+      note('카메라 ' + n + '대를 전부 지웠다', before);
+    };
+    $('camTable').onclick = function (e) {
+      if (e.target.dataset.del != null) {
+        var before = snap(), no = +e.target.dataset.del + 1;
+        ENG.remove(+e.target.dataset.del);
+        UI.sel = -1; refresh();
+        note('카메라 ' + no + '번 삭제', before);
+        return;
+      }
+      var tr = e.target.closest ? e.target.closest('tr') : null;
+      if (tr && tr.dataset.i != null) select(+tr.dataset.i);
+    };
+    $('tabs').onclick = function (e) {
+      if (e.target.dataset.tab) setTab(e.target.dataset.tab);
+    };
+    $('resetView').onclick = function () { if (V3D) V3D.resetView(); };
+    // 빈 화면 안내의 버튼 — 첫 동작(설치 높이 고르기)으로 바로 보낸다
+    $('empty').onclick = function (e) {
+      if (e.target.dataset.go) goStep('h');
+    };
+    $('steps').onclick = function (e) {
+      var li = e.target.closest ? e.target.closest('li') : null;
+      if (li && li.dataset.step) goStep(li.dataset.step);
+    };
+
+    // 한 번에 하나만 편다. 왼쪽이 길어 스크롤해야 했던 것을 줄인다.
+    Array.prototype.forEach.call(document.querySelectorAll('.panel.acc'), function (pn) {
+      pn.querySelector('.acch').onclick = function () {
+        var open = pn.classList.contains('open');
+        Array.prototype.forEach.call(document.querySelectorAll('.panel.acc'),
+          function (o) { o.classList.remove('open'); });
+        if (!open) pn.classList.add('open');
+        if (pn.dataset.acc === 'h' || pn.dataset.acc === 'in') PLAN.resize();
+      };
+    });
+
+    var tg = $('tglOcc');
+    tg.onclick = function () {
+      UI.onlyOcc = !UI.onlyOcc;
+      tg.classList.toggle('on', UI.onlyOcc);
+      if (UI.tab === 'plan') PLAN.draw(); else mount3d();
+    };
+
+    var mk = $('mapKind');
+    mk.onchange = function () {
+      UI.map = mk.value;
+      fillHeatLegend();
+      if (UI.tab === 'plan') PLAN.draw(); else mount3d();
+      viewNote();
+      refresh();
+    };
+
+    var tv = $('tglVox');
+    tv.onclick = function () {
+      UI.vox = !UI.vox;
+      syncTgl();                            // 눌린 표시 = 현장만
+      if (UI.tab === 'plan') PLAN.draw(); else mount3d();
+      viewNote();
+    };
+
+    var tf = $('tglFine');
+    tf.onclick = function () {
+      UI.fine = !UI.fine;
+      tf.classList.toggle('on', UI.fine);
+      if (UI.tab === 'v3d') mount3d();
+      viewNote();
+    };
+    $('hfov').textContent = d.camera.hfov_deg;
+
+    // planNote·siteNote 는 show() 에서 한 번만 채워 입력이 들어와도 옛 수치가
+    // 남아 있었다(카드는 36,968 인데 여기는 26,832). refresh 에서 다시 쓴다.
+    $('limits').innerHTML =
+      '한계 — <b>ρ축(유효 픽셀밀도)</b>은 GDUT-HWD 실사진의 실제 머리 크기에서 '
+      + '얻었고, <b>θ·o 축</b>은 SHWD 정지영상의 합성 변형에서 얻어 실제 현장 '
+      + '영상으로 검증한 바 없다. 세 축의 상호작용은 넣지 않은 1차 근사다. '
+      + '카메라 부각(pitch)은 검사하지 않는다(작업면을 덮도록 조준했다고 본다). '
+      + '판정 임계 ' + d.threshold + ' 와 목표 ' + fmtPct(d.target)
+      + ' 는 우리가 제안하는 잠정값이며 LH 고시값이 아니다.'
+      // 위험가중치가 어디서 왔는지 밝힌다. 자체 산정하지 않고 지수 표를
+      // **입력으로** 받는 구조이며, 지금 무엇을 쓰고 있는지가 보여야 한다.
+      + ' 위험가중치는 <b>자체 산정하지 않고</b> 지수 표에서 받는다 — 지금 값은 '
+      + '상대 순위 <b>잠정값</b>이며 LH·국토안전관리원 지수를 확보하면 입력 '
+      + '파일만 교체한다.';
+    fillHeatLegend();
+
+    PLAN = new Plan($('plan'));
+    PLAN.bindDraw();
+    setH(+$('h').value);   // 기본값은 마크업 한 곳에서만 정한다
+    refresh();
+  }
+
+  var NOT_READY = '\n\npython src/export_site.py 를 먼저 돌리고, '
+                + 'mockup 폴더에서 serve.bat 으로 열 것.';
+  try {
+    if (window.SITE_DATA) { show(window.SITE_DATA); }
+    else {
+      fetch('site.json')
+        .then(function (r) {
+          if (!r.ok) throw new Error('site.json 을 읽지 못했다 (HTTP ' + r.status + ')');
+          return r.json();
+        })
+        .then(show)
+        .catch(function (e) { fail(e.message + NOT_READY); });
+    }
+  } catch (e) { fail(e.message + NOT_READY); }
+})();
+</script>
+</body>
+</html>

@@ -36,15 +36,32 @@ if defined PYCMD goto :havepy
 goto :nopython
 
 :havepy
+REM --- 입력이 바뀌었을 때만 다시 계산한다 ------------------------------
+REM  종전에는 열 때마다 무조건 돌렸다. 현장이 단지 전체로 넓어지면서 그
+REM  계산이 55분이 됐고, 버튼을 누른 사람 눈에는 멈춘 것으로 보였다.
+REM  "옛 수치를 최신인 양 보여주지 않는다" 는 원칙은 그대로 지킨다 -
+REM  입력이 산출물보다 새로우면 계산하고, 아니면 그냥 연다.
+%PYCMD% src/needs_eval.py
+if errorlevel 1 goto :fresh
+
 echo.
-echo   평가를 계산합니다. 복셀 78,816개 x 카메라 후보 100개라 몇 분 걸립니다.
-echo   창을 닫지 마세요.
+echo   입력이 바뀌었습니다. 평가를 다시 계산합니다.
+%PYCMD% src/needs_eval.py --why
+%PYCMD% -c "import sys;sys.path.insert(0,'src');import config as c;print('  복셀 %d x %d x %d m 격자 - 카메라 후보를 세는 중입니다.'%(c.SITE_WIDTH_M,c.SITE_DEPTH_M,c.VOXEL_M))" 2>nul
+echo.
+echo   현장 크기에 따라 수십 분이 걸릴 수 있습니다. 창을 닫지 마세요.
+echo   (계산 없이 지금 결과를 보려면 이 창을 닫고  start.bat /noeval  로 실행)
 echo.
 %PYCMD% src/report.py
 if errorlevel 1 goto :failed
 
 echo.
 echo   계산 완료. 화면을 엽니다.
+goto :launch
+
+:fresh
+echo.
+echo   산출물이 입력보다 새롭습니다. 다시 계산하지 않고 바로 엽니다.
 goto :launch
 
 REM --- 계산 실패: 화면을 열지 않는다 -----------------------------------

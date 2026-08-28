@@ -43,12 +43,78 @@ class Box:
     x2: float; y2: float; z2: float
     kind: str = "solid"
     coverage: float = 1.0
+    # 연직축(z) 둘레 회전각. 0 이면 축정렬이고 기존과 완전히 같다.
+    #
+    # **왜 필요했나.** 실제 도면의 404·405동이 사선으로 앉아 있다. 축정렬로
+    # 펴서 넣었더니 가림이 실제와 다른 방향으로 계산됐다. x1..y2 는 회전 전
+    # 좌표이며, 중심을 축으로 yaw_deg 만큼 돌린 것이 실제 형상이다.
+    yaw_deg: float = 0.0
     # 슬래브 관통부(엘리베이터·계단실·설비 샤프트)의 평면 사각형 목록.
     # **위험구역 도출에만 쓴다.** 광선투사는 이 구멍을 통과시키지 않는다 —
     # 슬래브를 여전히 속 찬 판으로 본다. 아래층이 위층 구멍으로 보이는 효과는
     # 모델에 없으며, 이는 가림을 실제보다 크게 잡는 쪽이라 안전 판정에서
     # 보수적인 방향이다. 한계로 명시한다.
     openings: tuple = ()
+    # 한 장의 판을 여러 상자로 쪼갠 경우, 그 판을 가리키는 이름.
+    # **zone_derive 가 이것으로 조각을 다시 합친다** — 안 그러면 조각 사이
+    # 이음매까지 "슬래브 단부" 로 잡는다(실제 단부가 아니다).
+    group: str = ""
+
+    # ── 회전 도우미 ──────────────────────────────────────────────────
+    # 회전을 쓰는 쪽이 매번 삼각함수를 다시 쓰지 않도록 여기 모은다.
+
+    @property
+    def rotated(self) -> bool:
+        return abs(self.yaw_deg) > 1e-9
+
+    @property
+    def center_xy(self) -> tuple:
+        return ((self.x1 + self.x2) / 2.0, (self.y1 + self.y2) / 2.0)
+
+    @property
+    def half_xy(self) -> tuple:
+        return ((self.x2 - self.x1) / 2.0, (self.y2 - self.y1) / 2.0)
+
+    def to_local_xy(self, x, y):
+        """세계 좌표 → 상자 중심 기준 로컬 좌표. numpy 배열도 받는다."""
+        cx, cy = self.center_xy
+        if not self.rotated:
+            return x - cx, y - cy
+        import math as _m
+        c, s_ = _m.cos(_m.radians(self.yaw_deg)), _m.sin(_m.radians(self.yaw_deg))
+        dx, dy = x - cx, y - cy
+        return dx * c + dy * s_, -dx * s_ + dy * c
+
+    def contains_xy(self, x: float, y: float) -> bool:
+        lx, ly = self.to_local_xy(x, y)
+        hx, hy = self.half_xy
+        return abs(lx) <= hx and abs(ly) <= hy
+
+    def contains(self, x: float, y: float, z: float) -> bool:
+        return self.z1 <= z <= self.z2 and self.contains_xy(x, y)
+
+    def near_xy(self, x: float, y: float, d: float) -> bool:
+        """상자 바깥으로 d 만큼 부풀린 영역 안인가. 비계 곁 판정에 쓴다."""
+        lx, ly = self.to_local_xy(x, y)
+        hx, hy = self.half_xy
+        return abs(lx) <= hx + d and abs(ly) <= hy + d
+
+    def corners_xy(self) -> list:
+        """평면 네 꼭짓점(회전 반영). 그리기와 구역 도출이 쓴다."""
+        cx, cy = self.center_xy
+        hx, hy = self.half_xy
+        pts = [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)]
+        if not self.rotated:
+            return [(cx + a, cy + b) for a, b in pts]
+        import math as _m
+        c, s_ = _m.cos(_m.radians(self.yaw_deg)), _m.sin(_m.radians(self.yaw_deg))
+        return [(cx + a * c - b * s_, cy + a * s_ + b * c) for a, b in pts]
+
+    def bbox_xy(self) -> tuple:
+        """회전을 반영한 축정렬 외접 사각형. 거친 걸러내기에만 쓴다."""
+        xs = [p[0] for p in self.corners_xy()]
+        ys = [p[1] for p in self.corners_xy()]
+        return min(xs), min(ys), max(xs), max(ys)
 
 
 @dataclass(frozen=True)
@@ -159,7 +225,9 @@ def _solids(scaffold_coverage: float = None) -> list:
         else:
             cov = float(item["coverage"])
         ops = tuple(tuple(float(v) for v in o) for o in item.get("openings", ()))
-        s.append(Box(*[float(v) for v in b], item.get("kind", "solid"), cov, ops))
+        s.append(Box(*[float(v) for v in b], item.get("kind", "solid"), cov,
+                     float(item.get("yaw_deg", 0.0)), ops,
+                     str(item.get("group", ""))))
     return s
 
 
@@ -281,19 +349,21 @@ def _cameras(spacing_m: float = None, solids: list = None) -> list:
     # 바꾸는 순간 카메라 후보가 건물과 따로 놀았다. 형상이 바뀌면 설치 가능
     # 자리도 따라 바뀌어야 한다 — 그것이 이 도구가 받는 입력의 성질이다.
     for b in [x for x in solids if x.kind == "core"]:
-        cx, cy = (b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2
-        hx, hy = (b.x2 - b.x1) / 2, (b.y2 - b.y1) / 2
-        for dx in (-hx, 0.0, hx):
-            for dy in (-hy, 0.0, hy):
-                if dx == 0.0 and dy == 0.0:
-                    continue
-                add(cx + dx, cy + dy, b.z2 - 1.0, "core_top", "k")
+        # 꼭짓점 넷과 변 중점 넷. **회전을 반영한다** — 사선으로 앉은 동의
+        # 코어 위에 축정렬로 점을 찍으면 카메라가 허공에 뜬다.
+        cs = b.corners_xy()
+        mids = [((cs[i][0] + cs[(i + 1) % 4][0]) / 2,
+                 (cs[i][1] + cs[(i + 1) % 4][1]) / 2) for i in range(4)]
+        for x, y in cs + mids:
+            add(x, y, b.z2 - 1.0, "core_top", "k")
 
     # ③ 비계 상단 난간 — 실제로 카메라를 다는 자리다
     sc = [x for x in solids if x.kind == "scaffold"]
     if sc:
-        ox1 = min(x.x1 for x in sc); oy1 = min(x.y1 for x in sc)
-        ox2 = max(x.x2 for x in sc); oy2 = max(x.y2 for x in sc)
+        # 회전을 반영한 외접 사각형을 쓴다. 동이 여럿이면 전체를 감싼다.
+        bb = [x.bbox_xy() for x in sc]
+        ox1 = min(b[0] for b in bb); oy1 = min(b[1] for b in bb)
+        ox2 = max(b[2] for b in bb); oy2 = max(b[3] for b in bb)
         top = max(x.z2 for x in sc)
         nx = max(2, int(round((ox2 - ox1) / sp)))
         ny = max(2, int(round((oy2 - oy1) / sp)))
@@ -342,15 +412,14 @@ def _occupiable(x: float, y: float, z: float, solids: list) -> bool:
                 return True                     # 지면은 현장 전역
             for b in solids:                    # 상부층은 슬래브 위만
                 if (b.kind == "slab" and abs(b.z2 - floor_z) < 1e-6
-                        and b.x1 <= x <= b.x2 and b.y1 <= y <= b.y2):
+                        and b.contains_xy(x, y)):
                     return True
 
     d = config.OCCUPIABLE_NEAR_SCAFFOLD_M
     for b in solids:                            # 비계 작업발판 곁
         if b.kind != "scaffold":
             continue
-        if (b.x1 - d <= x <= b.x2 + d and b.y1 - d <= y <= b.y2 + d
-                and b.z1 <= z <= b.z2):
+        if b.near_xy(x, y, d) and b.z1 <= z <= b.z2:
             return True
     return False
 
@@ -390,10 +459,8 @@ def _voxels(solids: list, zones: list) -> list:
             for i in range(nx):
                 x, y = (i + 0.5) * step, (j + 0.5) * step
 
-                if any(s.x1 <= x <= s.x2 and s.y1 <= y <= s.y2
-                       and s.z1 <= z <= s.z2
-                       and s.kind in ("core", "slab", "stack")
-                       for s in solids):
+                if any(s.kind in ("core", "slab", "stack")
+                       and s.contains(x, y, z) for s in solids):
                     continue                    # 골조 안 — 들어갈 수 없다
 
                 if config.VOXEL_MODE == "volume":
@@ -402,7 +469,7 @@ def _voxels(solids: list, zones: list) -> list:
                 else:
                     if zi > 0:
                         floor_z = config.SLAB_LEVELS_M[zi]
-                        if not any(b.x1 <= x <= b.x2 and b.y1 <= y <= b.y2
+                        if not any(b.contains_xy(x, y)
                                    and abs(b.z2 - floor_z) < 1e-6 for b in slabs):
                             continue
                     occ, lvl = True, zi

@@ -74,6 +74,106 @@ def evaluate(site, cam_ids, pairs: dict, curve) -> dict:
         "fail_voxel_count": len(fails),
         "per_voxel": per_voxel,
         "fail_zones": fails,
+        **_headline(site, per_voxel),
+    }
+
+
+def _headline(site, per_voxel: dict) -> dict:
+    """대표 지표 — **AI 인식 가능 공간 비율**과 그 공간 분해 (2026-08-27).
+
+    종전 대표 지표는 WDR 이었다. WDR 은 위험가중 기대값이라 "얼마나 잘 보고
+    있는가"를 한 줄로 말하기에는 읽기 어렵다. 대표는 **가중치 없는 비율**로
+    바꾼다 — *"작업자가 설 수 있는 공간의 몇 %를 AI 가 인식할 수 있는가"*.
+    WDR 은 보조 지표로 남는다.
+
+    `risk_miss` = w·(1−P) 는 **놓치고 있는 위험의 양**이다. 이 값의 합을 Σw 로
+    나누면 정확히 1−WDR 이므로, 지도에 칠한 값을 다 더하면 헤드라인 숫자가
+    된다. 어느 칸이 그 숫자에 얼마나 기여했는지가 그대로 보인다.
+
+    구역별 집계는 **구역이 겹치므로 합이 전체를 넘는다.** 한 복셀이 타워크레인
+    반경 안의 갱폼 작업면일 수 있다. 비율을 더하지 말 것.
+    """
+    thr = config.P_DETECT_THRESHOLD
+    live = [v for v in site.voxels if v.get("occupiable", True)]
+    n = len(live)
+    if not n:
+        return {"recognized_ratio": None, "mean_p": None,
+                "risk_miss_total": None, "by_zone": []}
+
+    # **구역의 제 가중치.** 복셀의 w 는 겹친 구역 중 최댓값이라(보수적 판정)
+    # 그것으로 구역을 대표시키면 약한 구역이 강한 구역의 값을 빌려 온다 -
+    # 콘크리트 타설(w2)이 슬래브 단부(w10)와 겹쳐 w10 으로 보고됐다.
+    # 한 구역이 여러 층에 걸치면 층마다 Zone 이 있으므로 최댓값을 잇는다.
+    zw = {}
+    for z in getattr(site, "zones", []):
+        if z.weight > zw.get(z.name, 0):
+            zw[z.name] = z.weight
+
+    ok = miss = psum = 0.0
+    by = {}
+    for v in live:
+        p = per_voxel[v["id"]] or 0.0
+        m = v["w"] * (1.0 - p)
+        psum += p
+        miss += m
+        hit = 1 if p >= thr else 0
+        ok += hit
+        for z in (v["zones"] or ["_outside"]):
+            e = by.setdefault(z, {"zone": z, "n": 0, "ok": 0, "miss": 0.0,
+                                  "w": zw.get(z, config.RISK_WEIGHT_DEFAULT)})
+            e["n"] += 1
+            e["ok"] += hit
+            e["miss"] += m
+
+    rows = sorted(by.values(), key=lambda e: -e["miss"])
+    for e in rows:
+        e["recognized_ratio"] = round(e["ok"] / e["n"], 4)
+        e["risk_miss"] = round(e["miss"], 1)
+        e["share_of_total_miss"] = round(e["miss"] / miss, 4) if miss else None
+        del e["miss"]
+
+    return {
+        "recognized_ratio": round(ok / n, 4),
+        "recognized_voxels": int(ok),
+        "denominator_voxels": n,
+        "mean_p": round(psum / n, 4),
+        "risk_miss_total": round(miss, 1),
+        "by_zone": rows,
+        "_note": "recognized_ratio 가 대표 지표다 (가중치 없는 비율). "
+                 "by_zone 은 위험구역이 겹치므로 비율의 합이 전체와 다르다",
+    }
+
+
+def geometric_cover(site, cam_ids, pairs: dict, min_rho_px: float = None) -> dict:
+    """**같은 배치를 기존 방식의 자로 잰다** (2026-08-27).
+
+    §5.4 A 의 기하 커버리지를 목적함수가 아니라 **측정자**로 쓴다. 배치를 두 개
+    만들어 비교하는 대신, 배치 하나를 자 두 개로 재는 것이 지금의 논증이다 —
+    *"기존 기준으로는 커버라고 나오는데 실제 인식은 이만큼"*.
+
+    임계는 DORI 최소 픽셀밀도이며 인간 관찰자 기준이다(§9). 여기서는 기존
+    방식이 무엇을 커버로 세는지 재현하는 용도로만 쓴다.
+    """
+    if min_rho_px is None:
+        min_rho_px = config.GEOMETRIC_MIN_RHO_PX
+    live = [v for v in site.voxels if v.get("occupiable", True)]
+    n = len(live)
+    ok = wok = wsum = 0.0
+    for v in live:
+        wsum += v["w"]
+        if any(_covers(pairs.get((cid, v["id"])), min_rho_px) for cid in cam_ids):
+            ok += 1
+            wok += v["w"]
+    return {
+        "standard": "IEC 62676-4 (DORI)",
+        "level": config.GEOMETRIC_DORI_LEVEL,
+        "min_rho_px": round(min_rho_px, 2),
+        "covered_ratio": round(ok / n, 4) if n else None,
+        "covered_voxels": int(ok),
+        "weighted_covered_ratio": round(wok / wsum, 4) if wsum else None,
+        "denominator_voxels": n,
+        "note": "같은 배치를 기존 방식의 자로 잰 값이다. DORI 는 인간 관찰자 "
+                "기준이며 AI 검출기에 대해 검증된 바 없다",
     }
 
 

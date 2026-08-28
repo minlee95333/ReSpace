@@ -153,3 +153,27 @@ PowerPoint 에서 `파일 > 옵션 > 저장 > 파일에 글꼴 포함` 을 체�
 
 이 자료는 수치가 주인공(`66.8% → 70.0%`, `334 → 168`)이라 숫자 조판 품질이 컸다.
 서체를 바꾸려면 `tools/theme.py` 의 `DISPLAY`·`TEXT`·`FONT_FILES` 만 고친다.
+
+## 이식된 테스트 (2026-08-27)
+
+`feat/mockup-and-eval` 에서 배치 기능(`mockup/engine.js` · `mockup/mounts.js`)을
+가져오면서 **두 구현이 같은 값을 내는지**를 고정한 테스트를 함께 둔다. 화면과
+보고서가 다른 말을 하면 안 되는데, 눈으로는 드러나지 않는 종류의 오류다.
+
+| 테스트 | 대조 대상 | 만드는 곳 |
+|---|---|---|
+| `test_obb.mjs` | 회전 상자 광선판정 — `src/geometry.py:_ray_hits_box` | `make_obb_fixture.py` |
+| `test_engine.mjs` | 복셀별 검출확률 — `geometry.pair` + `detect_model` | `make_engine_fixture.py` |
+
+```
+python tools/make_obb_fixture.py    && node tools/test_obb.mjs
+python tools/make_engine_fixture.py && node tools/test_engine.mjs
+```
+
+`test_engine.mjs` 는 `mockup/site.json` 을 읽으므로 현장이나 곡선을 바꿨으면
+`python src/export_site.py` 를 먼저 돌린다.
+
+**`test_mounts.mjs` 는 가져오지 않았다.** 설치 자리 규칙 자체는 옳지만, 그쪽
+현장(100×60m · 솔리드 12 · 가설장비 없음)의 좌표와 개수를 단언문에 박아 둔
+테스트라 이 갈래 현장(210×125m · 솔리드 59 · 타워크레인·펜스 있음)에서는 16건이
+실패한다. 규칙의 결함이 아니라 대조표가 다른 현장의 것이다.

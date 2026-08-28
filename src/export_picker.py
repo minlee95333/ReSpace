@@ -59,11 +59,26 @@ def main():
     site = site_model.build()
     curve = detect_model.load()
 
-    cmp_path = config.OUTPUTS / "comparison.json"
-    must = []
-    if cmp_path.exists():
-        cmp_ = json.loads(cmp_path.read_text(encoding="utf-8"))
-        for v in (cmp_.get("placements") or {}).values():
+    # 반드시 넣을 카메라 - **평가한 배치를 화면에서 재현할 수 있어야 한다.**
+    #
+    # 종전에는 comparison.json 의 세 배치를 읽었는데, 자동 배치를 범위에서
+    # 빼면서 그 파일이 폐기 표시로 바뀌었다(status: not_produced). 지금 평가
+    # 대상은 계획서 하나이므로 그것을 읽는다. site_eval.json 의 배치도 함께
+    # 넣어 두 곳이 어긋나도 빠지지 않게 한다.
+    must, plan_yaws = [], {}
+    plan_path = config.ROOT / "data" / "plans" / "as_planned.json"
+    if plan_path.exists():
+        doc = json.loads(plan_path.read_text(encoding="utf-8"))
+        for c in doc.get("cameras", []):
+            must.append(str(c["id"]))
+            # **계획서의 방위를 그대로 쓴다.** 안 넘기면 all_pairs 가 방위를
+            # 다시 골라, 같은 16대인데 report.py 와 다른 배치를 재게 된다
+            # (실측: 화면 머리 5.5점 대 직접 배치 5.7점).
+            plan_yaws[str(c["id"])] = float(c["yaw_deg"])
+    ev_path = config.SITE_EVAL_JSON
+    if ev_path.exists():
+        ev = json.loads(ev_path.read_text(encoding="utf-8"))
+        for v in (ev.get("placements") or {}).values():
             must += v.get("camera_ids") or []
 
     cams = pick_candidates(site, must)
@@ -75,7 +90,8 @@ def main():
     vox = [v for v in site.voxels if v.get("occupiable", True)]
     print(f"활동공간 {len(vox):,} 셀 · 예상 {len(chosen) * len(vox) / 1e6:.1f}M 바이트")
 
-    pairs, yaws = geometry.all_pairs(site, cameras=chosen)
+    pairs, yaws = geometry.all_pairs(site, cameras=chosen,
+                                     fixed_yaws=plan_yaws)
 
     buf = bytearray(len(chosen) * len(vox))
     k = 0

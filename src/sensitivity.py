@@ -8,8 +8,18 @@
   2) 비계 시야 점유율     config.SCAFFOLD_COVERAGE (= 0.35)
   3) 판정 임계            config.P_DETECT_THRESHOLD (= 0.5, §5.3 이 잠정값이라 명시)
 
-셋 다 "그 값을 바꾸면 결론이 뒤집히지 않느냐"는 물음에 답이 있어야 한다.
-**ΔWDR 의 부호가 유지되면 그 표 자체가 방어 근거가 된다.**
+**무엇을 지키는 표인가가 2026-08-27 에 바뀌었다.** 종전에는 배치를 두 개
+만들어(기하 / 확률) ΔWDR 의 부호가 유지되는지를 보였다. 자동 배치를 쓰지
+않기로 하면서(`config.ENABLE_OPTIMIZATION = False`) 그 비교가 사라졌다.
+
+지금 지키는 주장은 이것이다 - **어느 값을 넣어도 고위험 작업구역의 인식률이
+낮게 유지된다.** 절대 인식률은 파라미터를 따라 크게 흔들리지만, 슬래브 단부
+같은 특정 구역이 계속 바닥이라면 그것은 파라미터가 만든 결과가 아니다.
+
+ΔWDR 대신 보는 것:
+  - `recognized_ratio`      전체 인식 가능 공간 비율
+  - `worst_zones`           가장 낮은 구역들의 인식률
+  - 임계 스윕은 배치가 하나뿐이라 미달 개수의 절대값만 본다
 
 1)은 검출기를 다시 돌려야 하므로 h(o) 단면만 재측정한 CSV 를 읽어 λ 를 다시
 맞춘다. 만드는 법:
@@ -49,30 +59,43 @@ import site_model
 import geometry
 import detect_model
 import aggregate
-import optimize
+import plan_io
 
 SC_LEVELS = [0.20, 0.35, 0.50]
 THRESHOLDS = [0.4, 0.5, 0.6]
+# 표에 세워 둘 구역. 추락사고가 실제로 일어나는 자리들이며, 여기가 계속
+# 바닥이라는 것이 이 스윕이 지키려는 주장이다.
+WATCH = ("slab_edge", "concrete_pour", "gangform_workface", "opening_perimeter")
+PLAN = config.ROOT / "data" / "plans" / "as_planned.json"
 
 
-def both_placements(site, pairs, curve) -> dict:
-    """기하·확률 두 배치를 같은 자로 재고 요약을 낸다."""
-    res = optimize.run(site, pairs, curve)
-    # optimize.run 이 geometric / assumed / empirical 셋을 내도록 바뀌면서
-    # "probabilistic" 키가 사라졌다. 이 파일이 그걸 못 따라가 KeyError 로 죽었고,
-    # 그래서 outputs/sensitivity.json 이 2026-08-15 값에 멈춰 있었다.
-    # 비교 대상은 실측 곡선 배치이므로 empirical 을 쓴다.
-    # 아래로 나가는 JSON 키 이름(WDR_probabilistic)은 tools/build_*.py 가 그대로
-    # 읽고 있어 유지한다.
-    g, p = res["geometric"], res["empirical"]
+def plan_camera(site) -> tuple:
+    """계획서의 카메라와 **방위**. 배치는 스윕 내내 고정이다 - 파라미터만 흔든다.
+
+    방위를 함께 받아야 한다. 종전에는 id 만 받고 방위는 `all_pairs` 가 다시
+    골랐는데, 그러면 report.py 와 기준값이 갈린다(실측 49,126 대 51,116).
+    같은 배치를 잰다고 말하면서 다른 배치를 재고 있었다.
+    """
+    cams, yaws, _ = plan_io.load(PLAN)
+    ids = [c.cid for c in cams]
+    known = {c.cid for c in site.cameras}
+    missing = [i for i in ids if i not in known]
+    if missing:
+        raise SystemExit(f"계획서 카메라가 현장 후보에 없다: {missing[:5]}")
+    return ids, yaws
+
+
+def diagnose(site, pairs, curve, cam_ids) -> dict:
+    """배치 하나를 진단한다. 대표 지표와 주시 구역의 인식률을 함께 낸다."""
+    r = aggregate.evaluate(site, cam_ids, pairs, curve)
+    by = {e["zone"]: e for e in (r.get("by_zone") or [])}
     return {
-        "geometric": {"WDR": g["WDR"], "fail": g["fail_voxel_count"],
-                      "camera_ids": g["camera_ids"]},
-        "probabilistic": {"WDR": p["WDR"], "fail": p["fail_voxel_count"],
-                          "camera_ids": p["camera_ids"]},
-        "delta_WDR": round(p["WDR"] - g["WDR"], 4),
-        "per_voxel": p["per_voxel"],
-        "per_voxel_geo": g["per_voxel"],
+        "recognized_ratio": r["recognized_ratio"],
+        "WDR": r["WDR"],
+        "fail": r["fail_voxel_count"],
+        "zones": {z: (by[z]["recognized_ratio"] if z in by else None)
+                  for z in WATCH},
+        "per_voxel": r["per_voxel"],
     }
 
 
@@ -97,7 +120,7 @@ def with_lambda(curve, lam: float):
     return detect_model.Curve(params)
 
 
-def sweep_lambda(site, pairs, curve) -> list:
+def sweep_lambda(site, pairs, curve, cam_ids) -> list:
     out = []
     base_lam = curve.lam
     found = sorted(config.OUTPUTS.glob("occ_section_div*.csv"))
@@ -112,32 +135,33 @@ def sweep_lambda(site, pairs, curve) -> list:
         entries.append((f"div {div}", lam, ys))
 
     for name, lam, ys in entries:
-        r = both_placements(site, pairs, with_lambda(curve, lam))
+        r = diagnose(site, pairs, with_lambda(curve, lam), cam_ids)
         out.append({"case": name, "lambda": round(lam, 4),
                     "section_normalized": ys,
-                    "WDR_geometric": r["geometric"]["WDR"],
-                    "WDR_probabilistic": r["probabilistic"]["WDR"],
-                    "fail_geometric": r["geometric"]["fail"],
-                    "fail_probabilistic": r["probabilistic"]["fail"],
-                    "delta_WDR": r["delta_WDR"]})
+                    "recognized_ratio": r["recognized_ratio"],
+                    "WDR": r["WDR"], "fail": r["fail"], "zones": r["zones"]})
     return out
 
 
 # ── 2) 비계 점유율 ────────────────────────────────────────────────────────
 
-def sweep_scaffold(curve) -> list:
+def sweep_scaffold(curve, cam_ids, cam_yaws) -> list:
     out = []
     for sc in SC_LEVELS:
+        # 점유율이 바뀌면 가림이 바뀌므로 광선을 다시 쏜다. 캐시는 형상 하나만
+        # 들고 있어 여기서는 못 쓴다.
+        #
+        # **계획서의 카메라에만 쏜다** (2026-08-27). 후보 308대 전부에 쏘면 한
+        # 수준에 수십 분이 들고 세 수준이면 하루가 간다. 배치는 스윕 내내
+        # 고정이므로 나머지 292대의 쌍은 쓰이지 않는다 - 계산할 이유가 없다.
         site = site_model.build(scaffold_coverage=sc)
-        pairs, _ = geometry.all_pairs(site)
-        r = both_placements(site, pairs, curve)
+        use = [c for c in site.cameras if c.cid in set(cam_ids)]
+        pairs, _ = geometry.all_pairs(site, cameras=use, fixed_yaws=cam_yaws)
+        r = diagnose(site, pairs, curve, cam_ids)
         out.append({"scaffold_coverage": sc,
-                    "WDR_geometric": r["geometric"]["WDR"],
-                    "WDR_probabilistic": r["probabilistic"]["WDR"],
-                    "fail_geometric": r["geometric"]["fail"],
-                    "fail_probabilistic": r["probabilistic"]["fail"],
-                    "delta_WDR": r["delta_WDR"]})
-        print(f"  비계 점유율 {sc:.2f} -> ΔWDR {r['delta_WDR']:+.4f}")
+                    "recognized_ratio": r["recognized_ratio"],
+                    "WDR": r["WDR"], "fail": r["fail"], "zones": r["zones"]})
+        print(f"  비계 점유율 {sc:.2f} -> 인식률 {r['recognized_ratio']:.4f}")
     return out
 
 
@@ -154,10 +178,13 @@ def sweep_threshold(site, res: dict) -> list:
     # 두 종류 숫자가 섞인다 (2026-08-25 확인).
     vox = [v for v in site.voxels if v.get("occupiable", True)]
     for thr in THRESHOLDS:
-        fg = sum(1 for v in vox if res["per_voxel_geo"][v["id"]] < thr)
-        fp = sum(1 for v in vox if res["per_voxel"][v["id"]] < thr)
-        out.append({"threshold": thr, "fail_geometric": fg,
-                    "fail_probabilistic": fp, "reduction": fg - fp,
+        # 비활동 복셀의 P 는 None 이다(값이 없다는 뜻). 집계에서 뺀다.
+        ok = sum(1 for v in vox
+                 if res["per_voxel"][v["id"]] is not None
+                 and res["per_voxel"][v["id"]] >= thr)
+        out.append({"threshold": thr,
+                    "recognized": ok, "fail": len(vox) - ok,
+                    "recognized_ratio": round(ok / len(vox), 4) if vox else None,
                     "n_occupiable": len(vox)})
     return out
 
@@ -165,49 +192,65 @@ def sweep_threshold(site, res: dict) -> list:
 def main() -> None:
     print("현장·기하 계산 중…")
     site = site_model.build()
-    pairs, _ = geometry.all_pairs(site)
     curve = detect_model.load()
-    base = both_placements(site, pairs, curve)
-    print(f"기준: ΔWDR {base['delta_WDR']:+.4f} "
-          f"(기하 {base['geometric']['WDR']} / 확률 {base['probabilistic']['WDR']})")
+    cam_ids, cam_yaws = plan_camera(site)
+    # **계획서의 카메라에만 쏜다.** 배치가 스윕 내내 고정이므로 나머지 후보의
+    # 쌍은 쓰이지 않는다. 후보 전체(308대)를 쏘면 쌍이 3,800만 개가 되어
+    # 메모리 10GB 를 먹고 한 번 도는 데 두 시간이 넘는다(2026-08-27 실측).
+    use = [c for c in site.cameras if c.cid in set(cam_ids)]
+    pairs, _ = geometry.all_pairs(site, cameras=use, fixed_yaws=cam_yaws)
+    base = diagnose(site, pairs, curve, cam_ids)
+    print(f"기준: 인식률 {base['recognized_ratio']:.4f} · WDR {base['WDR']:.4f} "
+          f"· 카메라 {len(cam_ids)}대 (계획서 고정)")
 
     print("\n[1] 스트라이프 주기 -> λ")
-    lam = sweep_lambda(site, pairs, curve)
+    lam = sweep_lambda(site, pairs, curve, cam_ids)
     for r in lam:
         print(f"  {r['case']:<14} λ={r['lambda']:>7.4f}  "
-              f"WDR {r['WDR_geometric']:.4f} / {r['WDR_probabilistic']:.4f}  "
-              f"ΔWDR {r['delta_WDR']:+.4f}")
+              f"인식률 {r['recognized_ratio']:.4f}  WDR {r['WDR']:.4f}")
     if len(lam) == 1:
         print("  (단면 CSV 가 없다. run_grid.py --occ-only --occ-divisor N 로 만들 것)")
 
     print("\n[2] 비계 시야 점유율")
-    sc = sweep_scaffold(curve)
+    sc = sweep_scaffold(curve, cam_ids, cam_yaws)
 
     print("\n[3] 판정 임계")
     th = sweep_threshold(site, base)
     for r in th:
-        print(f"  임계 {r['threshold']}  미달 기하 {r['fail_geometric']:>4} / "
-              f"확률 {r['fail_probabilistic']:>4}  (감소 {r['reduction']})")
+        print(f"  임계 {r['threshold']}  인식 {r['recognized']:>7,} / "
+              f"미달 {r['fail']:>7,}  ({r['recognized_ratio']:.4f})")
 
-    deltas = [r["delta_WDR"] for r in lam] + [r["delta_WDR"] for r in sc]
+    rows = lam + sc
+    ratios = [r["recognized_ratio"] for r in rows]
+    # 주시 구역이 전 구간에서 낮게 유지되는가 - 이것이 이 표가 지키는 주장이다.
+    worst = {}
+    for z in WATCH:
+        vals = [r["zones"].get(z) for r in rows if r["zones"].get(z) is not None]
+        if vals:
+            worst[z] = {"min": min(vals), "max": max(vals)}
+
     payload = {
-        "note": "가림축을 만드는 자유 파라미터 셋에 대한 민감도. "
-                "ΔWDR 의 부호가 유지되는지가 판정 기준이다",
-        "baseline": {"WDR_geometric": base["geometric"]["WDR"],
-                     "WDR_probabilistic": base["probabilistic"]["WDR"],
-                     "delta_WDR": base["delta_WDR"],
-                     "geometric_dori_level": config.GEOMETRIC_DORI_LEVEL},
+        "note": "가림축을 만드는 자유 파라미터 셋에 대한 민감도. **배치는 "
+                "계획서로 고정**하고 파라미터만 흔든다. 절대 인식률은 크게 "
+                "흔들리지만 고위험 작업구역이 계속 바닥이라면 그것은 "
+                "파라미터가 만든 결과가 아니다",
+        "placement": {"source": str(PLAN.relative_to(config.ROOT)),
+                      "camera_ids": cam_ids, "n": len(cam_ids)},
+        "baseline": {"recognized_ratio": base["recognized_ratio"],
+                     "WDR": base["WDR"], "fail": base["fail"],
+                     "zones": base["zones"]},
         "stripe_period_lambda": lam,
         "scaffold_coverage": sc,
         "threshold": th,
-        "delta_WDR_range": [min(deltas), max(deltas)],
-        "sign_preserved": bool(min(deltas) > 0),
+        "recognized_ratio_range": [min(ratios), max(ratios)],
+        "watch_zone_range": worst,
         "status": "ok",
     }
     path = config.OUTPUTS / "sensitivity.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"\nΔWDR 범위 {min(deltas):+.4f} ~ {max(deltas):+.4f}  "
-          f"부호 유지: {'예' if payload['sign_preserved'] else '아니오'}")
+    print(f"\n인식률 범위 {min(ratios):.4f} ~ {max(ratios):.4f}")
+    for z, v in worst.items():
+        print(f"  {z:<20} {v['min']:.4f} ~ {v['max']:.4f}")
     print(f"→ {path}")
 
 

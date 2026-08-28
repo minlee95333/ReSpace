@@ -31,10 +31,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # 압축 모드 — 제출 분량(5쪽)에 맞춘 판면. 원본 마크다운이 다르다.
 COMPACT = "--compact" in sys.argv
-SRC = ROOT / "docs" / ("제안서_6장_압축본.md" if COMPACT
-                       else "제안서_6장_연구상세내용.md")
-OUT = ROOT / "outputs" / ("제안서_6장_압축_0825.docx" if COMPACT
-                          else "제안서_6장_0825.docx")
+# 원본을 인자로 받는다 (2026-08-27). 종전에는 파일명이 박혀 있어 새 판을 쓸
+# 때마다 이 파일을 고쳐야 했다.
+#
+#   python tools/make_section6_docx.py                     # 최신본
+#   python tools/make_section6_docx.py --compact           # 압축본
+#   python tools/make_section6_docx.py docs/다른초안.md
+_ARG = next((a for a in sys.argv[1:] if not a.startswith("--")), None)
+if _ARG:
+    SRC = Path(_ARG) if Path(_ARG).is_absolute() else ROOT / _ARG
+elif COMPACT:
+    SRC = ROOT / "docs" / "제안서_6장_압축본.md"
+else:
+    SRC = ROOT / "docs" / "제안서_6장_0827.md"
+OUT = ROOT / "outputs" / (SRC.stem + ".docx")
 
 FONT = "맑은 고딕"
 BODY = 8.6 if COMPACT else 10.0

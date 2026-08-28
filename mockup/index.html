@@ -99,6 +99,18 @@ code{font-size:.94em}
         line-height:1.12;margin-top:2px}
 .kpi.hi .v{color:var(--color-ink)}
 .kpi:not(.hi) .v{color:var(--color-ink-2)}
+/* 점수 카드 — 이 화면의 초점이다. 홀로 서므로 크기와 여백으로 이긴다. */
+.kpi.score{min-width:230px;padding:10px 18px}
+.kpi.score .v{font-size:clamp(24px,2.6vw,40px);display:flex;align-items:baseline;gap:7px}
+.kpi.score .unit{font-size:.42em;font-weight:500;color:var(--color-muted);
+  font-family:var(--font-ui);letter-spacing:0}
+.kpi.score .grade{margin-left:auto;font-family:var(--font-ui);font-size:.34em;
+  font-weight:700;letter-spacing:.04em;color:var(--color-ink-2);
+  border:var(--rule-hair) solid var(--color-rule);border-radius:var(--radius-chip);
+  padding:2px 8px;align-self:center}
+.kpi.score .note{font-size:var(--text-3xs);color:var(--color-muted);
+  font-weight:500;letter-spacing:var(--track-small);margin-top:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34ch}
 
 /* ── 본문 — 지도 + 탭 패널 ───────────────────────────────────────── */
 .main{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(340px,1fr);
@@ -119,6 +131,10 @@ canvas{display:block;width:100%;height:100%;
        background:var(--color-paper);border-radius:12px;
        border:var(--rule-hair) solid var(--color-rule-2)}
 .canvaswrap{flex:1;min-height:0;padding:8px}
+/* 설치 가능 구역 오버레이. **배경과 테두리를 지운다** — canvas 규칙이
+ * background:var(--color-paper) 를 걸어 두어서, 그대로 두면 겹친 캔버스가
+ * 불투명한 종이가 되어 지도를 통째로 가린다. 실제로 히트맵이 사라졌다. */
+#pmOv{background:none;border:0;border-radius:0}
 
 /* ── 컨트롤 ───────────────────────────────────────────────────────── */
 .seg{display:inline-flex;border:var(--rule-hair) solid var(--color-muted);
@@ -133,18 +149,6 @@ canvas{display:block;width:100%;height:100%;
   box-shadow:var(--inset)}
 /* 배치 전/후 탭 — 2D·3D 토글과 같은 급으로 보이면 안 된다. 이게 이 도구의
  * 논증 축이고 저쪽은 표시 옵션이다. 크기·굵기·번호로 급을 갈라 준다. */
-.vtabs{display:inline-flex;gap:5px}
-.vtab{
-  border:var(--rule-hair) solid var(--color-rule);background:var(--color-paper-3);
-  border-radius:11px;padding:5px 12px;cursor:pointer;font:inherit;text-align:left;
-  line-height:1.15;color:var(--color-muted);box-shadow:var(--inset);
-  transition:background var(--dur-short) var(--ease-out),color var(--dur-short) var(--ease-out);
-}
-.vtab b{display:block;font-size:var(--text-xs);font-weight:600;letter-spacing:-.01em}
-.vtab i{display:block;font-size:var(--text-2xs);font-style:normal;opacity:.85}
-.vtab:hover{background:var(--color-paper-2);color:var(--color-ink-2)}
-.vtab[aria-pressed="true"]{background:var(--color-chrome);color:var(--color-paper-2);
-  border-color:var(--color-chrome);box-shadow:var(--raise-sm)}
 
 /* 델타 띠 — 어느 탭에 있든 양쪽 값을 같이 보인다. 탭을 왕복하며 기억으로
  * 비교하게 두면 전후를 못 느낀다. */
@@ -236,6 +240,11 @@ tbody tr:hover{background:var(--color-paper-3)}
 <script src="data.js"></script>
 <script src="theme.js"></script>
 <script src="viewer.js"></script>
+<!-- 배치 기능. place.html 과 **같은 엔진**을 쓴다 — 두 화면이 다른 값을
+     내면 안 된다. site.js 는 file:// 폴백이고 정본은 site.json 이다. -->
+<script src="engine.js"></script>
+<script src="mounts.js"></script>
+<script src="site.js" onerror="window.__noSiteJs = true"></script>
 <script src="plan.js"></script>
 <script>
 const pct = v => (v*100).toFixed(1) + '%';
@@ -256,6 +265,9 @@ function render(){
     .slice().sort((a,b)=> b.w-a.w || a.P_total-b.P_total);
   const rc = {}; fails.forEach(f=>rc[f.reason]=(rc[f.reason]||0)+1);
   const base = d.geometric_baseline, ps = d.dori_pair_stats;
+  /* 100점 만점 채점 (src/score.py). 배치 하나를 구역별 배점으로 채점한다 -
+     화면 머리의 대표 숫자가 이것이다. 옛 산출물에는 없으므로 없으면 '—'. */
+  const sc = shown.score || null;
   /* 두 배치가 공유하는 카메라와 갈리는 카메라. 탐욕이 1:1 대응을 만들지
      않으므로 "어느 대가 어디로 갔다"는 말은 못 한다 — 빠진 자리와 새 자리를
      각각 셀 뿐이다. */
@@ -273,16 +285,34 @@ function render(){
   <div class="top">
     <div class="brand">
       <h1>AI CCTV 배치 적정성 평가</h1>
-      <p>위험가중 안전모 검출률(WDR) · 같은 ${d.camera_budget}대를 같은 자로 측정
+      <p>안전모 미착용 검출확률 기준 · 카메라 ${d.camera_budget}대
         · 작업자 활동공간 ${nOcc.toLocaleString()}칸</p>
+      <!-- **이 화면은 읽는 자리다.** 카메라를 놓는 것은 place.html 이며,
+           그 길을 화면 안에 둔다 - 파일 목록에서 찾게 하지 않는다. -->
+      <p style="margin-top:6px">
+        <a href="place.html" style="font-size:var(--text-2xs);color:var(--color-ink-2)"
+           title="도면에서 카메라를 직접 놓고 그 자리에서 검출확률을 잰다"
+          >← 카메라를 직접 놓으려면 <b>배치 도구</b>로</a></p>
     </div>
     <div class="kpis">
-      <div class="kpi hi"><div class="k">검출 임계 미달</div>
-        <div class="v">${emp&&nOcc?pct(emp.fail_voxel_count/nOcc):'—'}</div></div>
-      <div class="kpi"><div class="k">① 현재 배치</div><div class="v">${geo?pct(geo.WDR):'—'}</div></div>
-      <div class="kpi"><div class="k">② 제안 배치</div><div class="v">${emp?pct(emp.WDR):'—'}</div></div>
-      <div class="kpi hi"><div class="k">개선폭</div>
-        <div class="v">${geo&&emp?((emp.WDR-geo.WDR>=0?'+':'')+((emp.WDR-geo.WDR)*100).toFixed(1)+'%p'):'—'}</div></div>
+      <!-- 자동 배치를 범위에서 뺀 뒤로 "현재/제안 배치·개선폭" 은 잴 대상이
+           없어졌다. 그 자리에 **배치 하나를 100점으로 채점한 값**을 둔다.
+           배점은 가중치에 비례하고 면적과 무관하다 - 넓은 저위험 구역을 덮어
+           갱폼을 통째로 놓치고도 높은 점수가 나오는 것을 막는다(src/score.py). -->
+      ${sc ? `
+      <div class="kpi hi score">
+        <div class="k">배치 점수 · 100점 만점</div>
+        <div class="v">${sc.total.toFixed(1)}<span class="unit">점</span>
+          <span class="grade">${sc.grade}</span></div>
+        <div class="note">${sc.grade_capped_by_critical
+          ? `치명 구역 ${sc.critical_failures.length}곳이 요구 미달 — 등급 상한 ${sc.grade}`
+          : (sc.biggest_loss ? `가장 많이 잃은 곳 · ${
+              (sc.rows.find(r=>r.zone===sc.biggest_loss)||{}).label || sc.biggest_loss
+            }` : '')}</div>
+      </div>` : `
+      <div class="kpi hi score"><div class="k">배치 점수 · 100점 만점</div>
+        <div class="v">—</div>
+        <div class="note">python src/report.py 로 산출한다</div></div>`}
     </div>
   </div>
 
@@ -290,12 +320,11 @@ function render(){
     <div class="panel">
       <div class="head">
         <h2>현장 검출확률</h2>
-        <span class="vtabs" id="segview">
-          <button class="vtab" data-v="geometric" aria-pressed="${view==='geometric'}"
-            ><b>① 현재 배치</b><i>기하 커버리지</i></button>
-          <button class="vtab" data-v="empirical" aria-pressed="${view==='empirical'}"
-            ><b>② 제안 배치</b><i>검출확률 기준</i></button>
+        <span class="seg" id="segplace">
+          <button id="pmOn" aria-pressed="false" title="지도를 눌러 카메라를 놓는다 (2D·2.5D)">배치</button>
         </span>
+        <select id="pmH" class="mbtn" style="display:none" title="설치 높이"></select>
+        <button id="pmClear" class="mbtn" style="display:none">비우기</button>
         <span class="seg" id="segmode">
           <button data-m="2d" aria-pressed="${MODE==='2d'}">2D</button>
           <button data-m="2.5d" aria-pressed="${MODE==='2.5d'}">2.5D</button>
@@ -311,7 +340,9 @@ function render(){
         <span>카메라 ${d.camera_budget}대 중 <b>${moved}대 이동</b>
           (${kept}대 제자리)</span>
       </div>`:''}
-      <div class="canvaswrap"><canvas id="map" role="img"
+      <div id="pmBar" class="delta" style="display:none;margin:0 8px 6px"></div>
+      <div class="canvaswrap" style="position:relative"><canvas id="pmOv"
+        style="position:absolute;inset:8px;pointer-events:none;display:none"></canvas><canvas id="map" role="img"
         aria-label="복셀별 검출확률 히트맵. 수치는 오른쪽 미달구역 탭에 있다"></canvas></div>
     </div>
 
@@ -319,16 +350,21 @@ function render(){
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" data-t="sum" aria-selected="true">개요</button>
         <button class="tab" role="tab" data-t="plan" aria-selected="false">평면도</button>
-        <button class="tab" role="tab" data-t="fail" aria-selected="false">미달구역 ${fails.length.toLocaleString()}</button>
+        <button class="tab" role="tab" data-t="fail" aria-selected="false">미달구역 ${(shown.fail_voxel_count ?? fails.length).toLocaleString()}</button>
         <button class="tab" role="tab" data-t="manual" aria-selected="false">직접 배치</button>
-        <button class="tab" role="tab" data-t="cmp" aria-selected="false">배치 비교</button>
-        <button class="tab" role="tab" data-t="dori" aria-selected="false">기준선</button>
+        ${Object.keys(P).length > 1
+          ? '<button class="tab" role="tab" data-t="cmp" aria-selected="false">배치 비교</button>'
+          : ''}
+        ${base && base.sweep
+          ? '<button class="tab" role="tab" data-t="dori" aria-selected="false">기준선</button>'
+          : ''}
       </div>
       <div class="body" id="tabbody">
         <section class="tabpanel on" data-p="sum">
           <dl class="kv">
             <dt>현장</dt><dd>${d.site.width_m}×${d.site.depth_m} m</dd>
-            <dt>복셀</dt><dd>${d.site.voxel_m} m · ${d.voxels.length.toLocaleString()}개</dd>
+            <dt>복셀</dt><dd>${d.site.voxel_m} m 격자 · 전체 ${(d._slim?.voxels_full ?? d.voxels.length).toLocaleString()}개</dd>
+            <dt>작업자 활동공간</dt><dd>${d.voxels.length.toLocaleString()}개 — 평가 분모</dd>
             <dt>카메라</dt><dd>후보 ${d.cameras.length} · 선정 ${d.camera_budget}</dd>
             <dt>판정 임계</dt><dd>P_total &lt; ${d.threshold}</dd>
             <dt>곡선 R²</dt><dd>${d.curve.r2_rho_native ?? d.curve.r2_full_grid ?? '—'}
@@ -345,17 +381,24 @@ function render(){
 
         <section class="tabpanel" data-p="plan">
           <p style="margin:0 0 8px;font-size:var(--text-2xs);color:var(--color-muted);line-height:1.6">
-            <b>가상 현장이다. 실제 LH 현장 도면이 아니다.</b> LH 아파트 건설현장
-            1개 공구(${d.site.width_m}×${d.site.depth_m} m)를 모사해
-            <code>site_model.py</code> 가 직육면체 조합으로 생성한다(CLAUDE.md §5.1).
+            <b>골조는 실제 도면에서 옮긴 것이다.</b> 신내역 금강펜테리움 센트럴파크
+            건축물현황도(세움터 발급)와 종합가설계획도를 축척 1:2000 으로 읽었다
+            (${d.site.width_m}×${d.site.depth_m} m · 5개 동 · 사선으로 앉은 두 동은
+            각도 그대로). <b>단, 카메라 배치는 실제 계획서가 아니다</b> — 경계를 따라
+            등간격으로 놓은 실무 관행 모사다(<code>tools/make_as_planned.py</code>).
             골조는 <code>data/building.json</code>, 위험구역은
             <code>data/zones.json</code> 입력과 <code>zone_derive</code> 규칙 도출에서 온다.</p>
           <canvas id="plan" role="img" style="height:300px"
-            aria-label="가상 현장 평면도. 골조·위험구역·카메라 배치"></canvas>
+            aria-label="현장 평면도. 골조·위험구역·카메라 배치"></canvas>
           <div class="foot" id="planlegend" style="padding:6px 0 0"></div>
         </section>
 
         <section class="tabpanel" data-p="fail">
+          ${d._slim && shown.fail_voxel_count > fails.length ? `<p style="margin:0 0 8px;
+            font-size:var(--text-2xs);color:var(--color-muted);line-height:1.6">
+            미달 ${shown.fail_voxel_count.toLocaleString()}칸 중 위험가중치가 높은
+            <b>${fails.length.toLocaleString()}칸</b>만 싣는다. 전량은
+            <code>outputs/site_eval.json</code> 에 있다.</p>` : ''}
           <table><thead><tr><th>복셀</th><th>위치</th><th>구역</th>
             <th class="num">w</th><th class="num">P</th><th>원인</th></tr></thead>
             <tbody>${fails.slice(0,400).map(f=>`<tr>
@@ -375,8 +418,10 @@ function render(){
             고를 때마다 위험가중 검출률을 다시 계산한다.</p>
           <div id="mstat" class="delta" style="margin:0 0 8px"></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-            <button class="mbtn" id="mgeo">현재 배치 불러오기</button>
-            <button class="mbtn" id="memp">제안 배치 불러오기</button>
+            <!-- 자동 배치를 뺀 뒤로 불러올 배치는 **평가한 것 하나**다.
+                 계획서(data/plans/as_planned.json)의 배치이며, 화면에서 고쳐
+                 보고 점수가 어떻게 움직이는지 견주는 출발점이 된다. -->
+            <button class="mbtn" id="mgeo">평가한 배치 불러오기</button>
             <button class="mbtn" id="mclr">비우기</button>
           </div>
           <div id="mlist" class="mlist">불러오는 중…</div>
@@ -417,7 +462,9 @@ function render(){
     <span><span class="chip fail"></span>P&lt;${d.threshold}</span>
     <span><span class="chip mid"></span>${d.threshold}~${Theme.CLEAR_AT}</span>
     <span><span class="chip clear"></span>${Theme.CLEAR_AT} 이상 윤곽만</span>
-    <span><span class="chip ghost"></span>다른 배치에만 있는 카메라 자리</span>
+    ${Object.keys(P).length > 1
+      ? '<span><span class="chip ghost"></span>다른 배치에만 있는 카메라 자리</span>'
+      : ''}
     <span style="margin-left:auto">기하 기준선 ${base?base.level:'—'} ·
       복셀 ${d.site.voxel_m}m · ${d.voxels.length.toLocaleString()}개</span>
   </div>`;
@@ -438,6 +485,175 @@ function mountMap(view, ghosts, camIds){
     ghostCameraIds: ghosts || [],
   });
   VIEWER.setMode(MODE);
+}
+
+/* ── 지도에서 직접 배치 (2026-08-28) ─────────────────────────────────
+ *
+ * **새 화면을 만들지 않는다.** 이 화면에서 놓을 수 있어야 한다는 요구다.
+ * place.html 과 **같은 engine.js·mounts.js** 를 쓴다 - 두 화면이 다른 값을
+ * 내면 어느 쪽을 믿어야 할지 알 수 없다.
+ *
+ * 인덱스 다리 - 엔진은 210x125x15 격자 전체를 t 로 훑고, 뷰어는 사람이 설
+ * 수 있는 복셀만 목록으로 든다. 둘을 t = ix + nx*(iy + ny*iz) 로 잇는다.
+ */
+let ENG = null, MD = null, PM = false, PMH = null, PMIDX = null, PMBASE = null;
+
+async function pmLoad(){
+  if (ENG) return true;
+  let sd = null;
+  try { sd = await fetch('site.json').then(r => r.json()); }
+  catch (e) { sd = (typeof window.SITE_RULES !== 'undefined') ? window.SITE_RULES : null; }
+  if (!sd) return false;
+  ENG = new CoverageEngine.Engine(sd);
+  MD = { site: sd.site, mounts: JSON.parse(JSON.stringify(sd.mounts)), solids: sd.solids };
+  // **엔진은 격자 전체를 훑지 않는다.** 구조체 안쪽을 뺀 384,615칸만 담고
+  // V.index[t] 에 원래 격자 번호를 들고 있다. 우리는 그 반대가 필요하다 -
+  // 뷰어 복셀의 격자 번호로 엔진 슬롯 t 를 찾아야 한다. 역표를 한 번 만든다.
+  // (종전에 격자 번호를 그대로 t 로 썼다가 P 가 전부 어긋났다.)
+  const S = sd.site, step = S.voxel_m;
+  const back = new Map();
+  const gi = sd.voxels.index;
+  for (let t = 0; t < gi.length; t++) back.set(gi[t], t);
+  PMIDX = D.voxels.map(v => {
+    const g = Math.floor(v.x / step)
+      + S.nx * (Math.floor(v.y / step) + S.ny * Math.floor(v.z / step));
+    const t = back.get(g);
+    return t === undefined ? -1 : t;        // -1 = 엔진이 안 세는 칸
+  });
+  return true;
+}
+
+function pmBar(html){
+  const b = document.getElementById('pmBar');
+  if (b) b.innerHTML = html;
+}
+
+/* 엔진이 낸 P 를 뷰어 복셀에 옮겨 적고 화면을 다시 그린다. */
+function pmPaint(){
+  const p = ENG.pTotal();
+  for (let i = 0; i < D.voxels.length; i++) {
+    const t = PMIDX[i];
+    D.voxels[i].P_total_manual = t < 0 ? null : p[t];   // null 은 뷰어가 건너뛴다
+  }
+  const m = ENG.metrics();
+  const ids = ENG.cams.map((c, i) => 'u' + i);
+  D.cameras = PMBASE.concat(ENG.cams.map((c, i) => (
+    { id: 'u' + i, x: c.x, y: c.y, z: c.z, mount: 'user', yaw_deg: c.yaw || 0 })));
+  pmBar(`<span>놓은 카메라 <b>${m.n_cameras}대</b></span>`
+    + `<span>인식 가능 공간 <b>${pct(m.spatial_coverage || 0)}</b></span>`
+    + `<span>WDR <b>${pct(m.WDR || 0)}</b></span>`
+    + `<span>미달 <b>${(m.fail_voxels || 0).toLocaleString()}</b>`
+    + ` / ${(m.denominator_voxels || 0).toLocaleString()}</span>`
+    + (m.n_cameras ? '' : '<span style="color:var(--color-muted)">'
+        + '지도에서 설치 가능한 자리를 누르세요</span>'));
+  // **뷰어를 다시 만들지 않는다.** mountMap 은 Viewer 를 새로 세우는데,
+  // 그 경로로 가면 화면이 비어 나왔다(원인 미상). 기존 뷰어의 키와 카메라
+  // 목록만 갈아 끼우면 같은 결과를 훨씬 적은 일로 얻는다.
+  VIEWER.opts.cameraIds = ids;
+  VIEWER.set('key', 'P_total_manual');
+  pmDrawOverlay();
+}
+
+/* 설치 가능한 자리를 지도에 겹쳐 그린다.
+ *
+ * **이게 없으면 클릭이 찍기가 된다.** 4m 격자로 재보면 210x125m 중 설치
+ * 가능한 표본이 10% 뿐이다 - 어디를 눌러야 하는지 화면이 말해 주지 않으면
+ * 열 번 눌러 아홉 번 거절당한다. place.html 이 파란 구역을 칠하는 이유다.
+ *
+ * 높이가 바뀔 때만 다시 재고(무겁다), 그림은 투영만 다시 한다.
+ */
+let PMOK = null, PMOKH = null;
+
+function pmScanPlaceable(){
+  if (PMOKH === PMH && PMOK) return PMOK;
+  const step = 2, W = MD.site.width_m, Dp = MD.site.depth_m;
+  const out = [];
+  for (let x = step / 2; x < W; x += step)
+    for (let y = step / 2; y < Dp; y += step)
+      if (Mounts.placeable(MD, x, y, PMH)) out.push([x, y]);
+  PMOK = out; PMOKH = PMH;
+  return out;
+}
+
+function pmDrawOverlay(){
+  const ov = document.getElementById('pmOv'), map = document.getElementById('map');
+  if (!ov || !map) return;
+  if (!PM) { ov.style.display = 'none'; return; }
+  const dpr = window.devicePixelRatio || 1;
+  ov.style.display = '';
+  ov.style.width = map.clientWidth + 'px';
+  ov.style.height = map.clientHeight + 'px';
+  ov.width = Math.max(1, Math.round(map.clientWidth * dpr));
+  ov.height = Math.max(1, Math.round(map.clientHeight * dpr));
+  const c = ov.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, ov.width, ov.height);
+  const pts = pmScanPlaceable();
+  // 설치 가능 표시는 데이터가 아니라 조작 안내다. 히트맵 색과 섞이지 않도록
+  // 채도 없는 파랑 하나만 옅게 쓴다.
+  c.fillStyle = 'rgba(40,110,220,0.22)';
+  const half = Math.max(2, (VIEWER._fit ? VIEWER._fit.s : 3) * 1.0);
+  for (const [x, y] of pts) {
+    const q = VIEWER._project(x, y, PMH);
+    if (!q) continue;
+    c.fillRect(q.x - half / 2, q.y - half / 2, half, half);
+  }
+  c.fillStyle = 'rgba(20,60,140,0.85)';
+  c.font = '11px system-ui, sans-serif';
+  c.fillText(`설치 가능 ${pts.length.toLocaleString()}곳 (높이 ${PMH} m)`, 8, 14);
+}
+
+async function pmToggle(on){
+  const btn = document.getElementById('pmOn');
+  if (on && !(await pmLoad())) {
+    document.getElementById('pmBar').style.display = '';
+    pmBar('site.json 을 읽지 못했다. <code>python src/export_site.py</code> 로 만든다.');
+    return;
+  }
+  PM = on;
+  btn.setAttribute('aria-pressed', String(on));
+  ['pmH', 'pmClear'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; });
+  document.getElementById('pmBar').style.display = on ? '' : 'none';
+  if (on) {
+    if (PMBASE === null) PMBASE = D.cameras.slice();
+    const sel = document.getElementById('pmH');
+    const hs = (Mounts.presetHeights ? Mounts.presetHeights(MD) : [3, 6, 9, 12]);
+    sel.innerHTML = hs.map(h => `<option value="${h}">${h} m</option>`).join('');
+    PMH = parseFloat(sel.value);
+    PMOK = null;
+    if (MODE === '3d') {          // 3D 는 역변환이 없다. 평면으로 내린다.
+      MODE = '2d';
+      document.querySelectorAll('#segmode button').forEach(x =>
+        x.setAttribute('aria-pressed', String(x.dataset.m === '2d')));
+    }
+    pmPaint();
+  } else {
+    D.cameras = PMBASE || D.cameras;
+    render();
+  }
+}
+
+/* 지도 클릭 -> 세계 좌표 -> 설치 가능 판정 -> 카메라 추가 */
+function pmClick(ev){
+  if (!PM || !ENG) return;
+  const cv = document.getElementById('map');
+  const r = cv.getBoundingClientRect();
+  const w = VIEWER.unproject(ev.clientX - r.left, ev.clientY - r.top, 0);
+  if (!w) { pmBar('3D 에서는 놓을 수 없다. <b>2D</b> 나 <b>2.5D</b> 로 바꾸세요.'); return; }
+  let x = w.x, y = w.y, yaw = 0;
+  const z = PMH;
+  if (!Mounts.placeable(MD, x, y, z)) {
+    pmBar(`(${x.toFixed(1)}, ${y.toFixed(1)}) 은 높이 ${z}m 에 설치할 수 없는 자리다.`
+        + ' 구조물 상부·측면·가설 장비 위·폴만 가능하다.');
+    return;
+  }
+  if (Mounts.kindAt(MD, x, y, z) === 'structure_side') {
+    const off = Mounts.sideMount(MD, x, y, z);
+    if (off) { x = off.x; y = off.y; yaw = off.yaw; }
+  }
+  ENG.add({ x: x, y: y, z: z, yaw: yaw });
+  pmPaint();
 }
 
 /* ── 직접 배치 ─────────────────────────────────────────────────────────
@@ -463,6 +679,67 @@ async function loadMatrix(){
 
 /* 선택된 카메라로 P_total 을 다시 계산해 복셀에 써 넣는다.
  * P_total = 1 - Π(1-P) — 중첩은 페널티가 아니라 이득이다(CLAUDE.md §5.3). */
+/* 100점 만점 채점 — 브라우저판.
+ *
+ * **규칙은 Python 이 정본이다**(src/score.py). 배점표·요구곡선·등급경계·치명
+ * 가중치를 여기 다시 적으면 한쪽만 고쳤을 때 조용히 어긋난다. data.json 의
+ * `score.rule` 에 실려 온 것을 그대로 읽는다. 구역 인덱스만 복셀에서 만든다.
+ *
+ * 직접 배치로 카메라를 바꾸면 점수가 따라 움직여야 한다 - 안 그러면 머리의
+ * 숫자가 화면 아래와 다른 배치를 가리킨다.
+ */
+function scoreOf(ptOf){
+  const rule = (D.placements && Object.values(D.placements)[0] || {}).score?.rule;
+  if (!rule) return null;
+  const req = rule.required_by_weight, grades = rule.grades;
+  const critW = rule.critical_weight, cap = rule.critical_grade_cap;
+  const thr = D.threshold;
+
+  /* 구역 -> {가중치, 셀 목록}. 구역 밖은 한 칸을 따로 차지한다(배경).
+   *
+   * **가중치는 셀에서 뽑지 않는다.** 셀의 w 는 겹친 구역 중 최댓값이라
+   * (안전 측면의 보수적 판정), 그것을 구역 가중치로 쓰면 약한 구역이 강한
+   * 구역의 값을 빌려 온다 - 콘크리트 타설(w2)이 슬래브 단부(w10)와 겹쳐
+   * w10 으로 잡혔고, Σ가중치가 33 대신 41 이 되어 배점이 통째로 어긋났다
+   * (실측: 5.5점이 4.4점으로). 구역의 제 가중치는 Python 이 낸 rows 에 있다. */
+  const zw = {};
+  ((Object.values(D.placements)[0].score || {}).rows || [])
+    .forEach(r => { zw[r.zone] = r.weight; });
+  const zs = {};
+  D.voxels.forEach((v, i) => {
+    if (v.occupiable === false) return;
+    const names = (v.zones && v.zones.length) ? v.zones : ['_background'];
+    names.forEach(n => {
+      if (!(n in zw)) return;                 // 채점표에 없는 구역은 세지 않는다
+      const e = zs[n] || (zs[n] = { w: zw[n], idx: [] });
+      e.idx.push(i);
+    });
+  });
+  const wsum = Object.values(zs).reduce((a, e) => a + e.w, 0);
+  if (!wsum) return null;
+
+  let total = 0; const crit = [];
+  let worst = null, worstLost = -1;
+  for (const [name, e] of Object.entries(zs)) {
+    const alloc = 100 * e.w / wsum;
+    let ok = 0;
+    for (const i of e.idx) if (ptOf(i) >= thr) ok++;
+    const cov = ok / e.idx.length;
+    const r = req[e.w] ?? req[String(e.w)] ?? 1;
+    const earned = alloc * Math.min(1, r > 0 ? cov / r : 1);
+    total += earned;
+    if (e.w >= critW && cov < r) crit.push(name);
+    if (alloc - earned > worstLost) { worstLost = alloc - earned; worst = name; }
+  }
+  total = Math.round(total * 100) / 100;
+  let grade = 'E';
+  for (const g of grades) if (total >= g.min) { grade = g.grade; break; }
+  const capped = crit.length > 0 && grade < cap;
+  return { total, grade: capped ? cap : grade, grade_capped_by_critical: capped,
+           critical_failures: crit, biggest_loss: worst,
+           rows: (Object.values(D.placements)[0].score || {}).rows || [] };
+}
+
 function recalcManual(){
   const {meta, a, n} = MX;
   const sel = meta.cameras.map((c,i)=>MSEL.has(c.id)?i:-1).filter(i=>i>=0);
@@ -479,8 +756,10 @@ function recalcManual(){
     const w = W[j]; num += w*pt; den += w;
     if (pt < thr) fail++;
   }
+  // 머리의 점수도 이 배치로 다시 잰다. P_total_manual 을 이미 채워 두었다.
+  const sc = scoreOf(i => D.voxels[i].P_total_manual ?? 0);
   return {wdr: den? num/den : 0, fail, n, picked: sel.length,
-          budget: meta.camera_budget};
+          budget: meta.camera_budget, score: sc};
 }
 
 function renderManual(){
@@ -491,6 +770,7 @@ function renderManual(){
     + (over? ' <span style="color:var(--color-warn,#8C2018)">초과</span>':'') + `</span>`
     + `<span>WDR <b>${pct(r.wdr)}</b></span>`
     + `<span>미달 <b>${r.fail.toLocaleString()}</b> / ${r.n.toLocaleString()}</span>`;
+  if (r.score) paintScore(r.score, `직접 배치 ${r.picked}대`);
   // VIEW 는 그대로 둔다. render() 가 placements[VIEW] 를 찾으므로
   // 'manual' 을 넣으면 배치 탭·델타 띠가 무너진다.
   mountMap('manual', [], [...MSEL]);
@@ -520,10 +800,16 @@ async function openManual(){
     MSEL = new Set(ids.filter(i=>MX.meta.cameras.some(c=>c.id===i)));
     box.querySelectorAll('input[data-c]').forEach(b=>b.checked=MSEL.has(b.dataset.c));
     renderManual(); };
-  document.getElementById('mgeo').onclick = ()=>setSel((D.placements.geometric||{}).camera_ids||[]);
-  document.getElementById('memp').onclick = ()=>setSel((D.placements.empirical||{}).camera_ids||[]);
+  document.getElementById('mgeo').onclick = ()=>{
+    const P = D.placements || {};
+    const k = P.baseline ? 'baseline' : Object.keys(P)[0];
+    setSel(((P[k]||{}).camera_ids)||[]);
+  };
   document.getElementById('mclr').onclick = ()=>setSel([]);
-  setSel((D.placements.empirical||{}).camera_ids||[]);
+  // 탭을 열면 **평가한 배치**로 시작한다. 종전 기본값은 사라진 'empirical'
+  // 을 가리켜 선택이 비어 있었고, 그러면 머리의 점수가 0 점으로 떨어져
+  // 개요 탭과 다른 말을 한다.
+  document.getElementById('mgeo').onclick();
 }
 
 /* 평면도. 탭을 처음 열 때 한 번만 그린다 — 숨어 있을 때 그리면 캔버스
@@ -538,14 +824,38 @@ function mountPlan(view){
   if (leg) leg.innerHTML = PLAN.legendHTML();
 }
 
+/* 점수 카드를 다시 칠한다. render() 를 통째로 다시 돌리면 직접 배치 탭이
+   닫히므로 이 카드만 갈아 끼운다. */
+function paintScore(sc, tag){
+  const card = document.querySelector('.kpi.score');
+  if (!card || !sc) return;
+  card.querySelector('.k').textContent = '배치 점수 · 100점 만점'
+    + (tag ? ' · ' + tag : '');
+  card.querySelector('.v').innerHTML =
+    `${sc.total.toFixed(1)}<span class="unit">점</span>`
+    + `<span class="grade">${sc.grade}</span>`;
+  const zl = (sc.rows.find(r=>r.zone===sc.biggest_loss)||{}).label || sc.biggest_loss;
+  card.querySelector('.note').textContent = sc.grade_capped_by_critical
+    ? `치명 구역 ${sc.critical_failures.length}곳이 요구 미달 — 등급 상한 ${sc.grade}`
+    : (zl ? `가장 많이 잃은 곳 · ${zl}` : '');
+}
+
 function wire(){
-  document.querySelectorAll('#segview button').forEach(b=>b.onclick=()=>{
-    VIEW = b.dataset.v; render(); });
+  const pmB = document.getElementById('pmOn');
+  if (pmB) pmB.onclick = () => pmToggle(!PM);
+  const pmHsel = document.getElementById('pmH');
+  if (pmHsel) pmHsel.onchange = () => {
+    PMH = parseFloat(pmHsel.value); PMOK = null; pmDrawOverlay(); };
+  const pmC = document.getElementById('pmClear');
+  if (pmC) pmC.onclick = () => { while (ENG && ENG.cams.length) ENG.remove(0); pmPaint(); };
+  const mapc = document.getElementById('map');
+  if (mapc && !mapc.dataset.pm) { mapc.dataset.pm = '1'; mapc.addEventListener('click', pmClick); }
   document.querySelectorAll('#segmode button').forEach(b=>b.onclick=()=>{
     MODE = b.dataset.m;
     document.querySelectorAll('#segmode button').forEach(x=>
       x.setAttribute('aria-pressed', String(x===b)));
     VIEWER.setMode(MODE);
+    pmDrawOverlay();
   });
   const so = document.getElementById('solids');
   if (so) so.onchange = () => VIEWER.set('showSolids', so.checked);

@@ -61,6 +61,108 @@ def _ring(x1, y1, x2, y2, t):
             [x1, y1, x1 + t, y2], [x2 - t, y1, x2, y2]]
 
 
+class _Merged:
+    """같은 group 의 상자들을 로컬 좌표에서 합친 하나의 상자.
+
+    조각들은 yaw 가 같고 주축을 따라 이어 붙어 있으므로, 로컬 좌표의 외접
+    상자가 곧 그 판의 바깥 윤곽이다. 요철의 홈은 이 안에 들어가므로 단부 띠가
+    홈까지 덮는다 — 홈 깊이만큼 보수적이며, 이음매를 단부로 잡는 것보다 낫다.
+    """
+    __slots__ = ("x1", "y1", "z1", "x2", "y2", "z2", "kind",
+                 "coverage", "yaw_deg", "openings")
+
+    def __init__(self, boxes):
+        import math
+        b0 = boxes[0]
+        self.kind, self.coverage, self.yaw_deg = b0.kind, b0.coverage, b0.yaw_deg
+        self.z1 = min(b.z1 for b in boxes); self.z2 = max(b.z2 for b in boxes)
+        self.openings = getattr(b0, "openings", ())
+        if not self.rotated:
+            self.x1 = min(b.x1 for b in boxes); self.y1 = min(b.y1 for b in boxes)
+            self.x2 = max(b.x2 for b in boxes); self.y2 = max(b.y2 for b in boxes)
+            return
+        # 회전 상자 — 로컬 좌표에서 합치고 중심을 다시 잡는다
+        r = math.radians(self.yaw_deg); c, s_ = math.cos(r), math.sin(r)
+        us, vs = [], []
+        for b in boxes:
+            cx, cy = b.center_xy; hx, hy = b.half_xy
+            for sx in (-1, 1):
+                for sy in (-1, 1):
+                    us.append(cx + sx * hx); vs.append(cy + sy * hy)
+        # 조각들은 회전 전 좌표를 공유하므로 그대로 외접시키면 된다
+        self.x1, self.x2 = min(us), max(us)
+        self.y1, self.y2 = min(vs), max(vs)
+
+    @property
+    def rotated(self):
+        return abs(self.yaw_deg) > 1e-9
+
+    @property
+    def center_xy(self):
+        return ((self.x1 + self.x2) / 2, (self.y1 + self.y2) / 2)
+
+    @property
+    def half_xy(self):
+        return ((self.x2 - self.x1) / 2, (self.y2 - self.y1) / 2)
+
+    def corners_xy(self):
+        """평면 네 꼭짓점(회전 반영). site_model.Box 와 같은 규약이어야 한다 —
+        갈리면 타설면 다각형이 실제와 다른 방향으로 그려진다."""
+        import math
+        cx, cy = self.center_xy
+        hx, hy = self.half_xy
+        pts = [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)]
+        if not self.rotated:
+            return [(cx + a, cy + b) for a, b in pts]
+        r = math.radians(self.yaw_deg)
+        c, s_ = math.cos(r), math.sin(r)
+        return [(cx + a * c - b * s_, cy + a * s_ + b * c) for a, b in pts]
+
+
+def _merge_groups(slabs: list) -> list:
+    """`group` 이 같은 상자들을 한 장으로 합친다. group 이 없으면 그대로 둔다."""
+    by, loose = {}, []
+    for b in slabs:
+        g = getattr(b, "group", None)
+        if g:
+            by.setdefault(g, []).append(b)
+        else:
+            loose.append(b)
+    return loose + [_Merged(v) if len(v) > 1 else v[0] for v in by.values()]
+
+
+def _box_ring(b, t):
+    """상자 안쪽 두께 t 의 띠. **회전을 반영한다.**
+
+    yaw 가 0 이면 종전과 똑같이 사각형 4개(kind="rect")를 낸다. 회전한
+    상자는 사각형으로 표현할 수 없으므로 로컬 좌표에서 띠를 만들고 꼭짓점을
+    세계 좌표로 돌려 다각형 4개(kind="poly")를 낸다. Zone 이 둘 다 받는다.
+
+    반환: (kind, areas)
+    """
+    if not getattr(b, "rotated", False):
+        return "rect", _ring(b.x1, b.y1, b.x2, b.y2, t)
+    import math
+    cx, cy = b.center_xy
+    hx, hy = b.half_xy
+    c, s_ = math.cos(math.radians(b.yaw_deg)), math.sin(math.radians(b.yaw_deg))
+
+    def w(lx, ly):
+        return [round(cx + lx * c - ly * s_, 3), round(cy + lx * s_ + ly * c, 3)]
+
+    rects = [(-hx, -hy, hx, -hy + t), (-hx, hy - t, hx, hy),
+             (-hx, -hy, -hx + t, hy), (hx - t, -hy, hx, hy)]
+    return "poly", [[w(a, d), w(e, d), w(e, f), w(a, f)]
+                    for a, d, e, f in rects]
+
+
+def _box_face(b):
+    """상자 상면 전체. 회전하면 다각형 하나, 아니면 사각형 하나."""
+    if not getattr(b, "rotated", False):
+        return "rect", [[b.x1, b.y1, b.x2, b.y2]]
+    return "poly", [[[round(x, 3), round(y, 3)] for x, y in b.corners_xy()]]
+
+
 def _outward_ring(x1, y1, x2, y2, t):
     """사각형 **바깥쪽** 두께 t 의 띠. 개구부 주변이 위험구역이다.
 
@@ -83,18 +185,28 @@ def derive(solids: list, top_slab_only: bool = True) -> list:
     """
     out = []
     slabs = _slabs(solids)
+    # **세 규칙 모두 판 한 장 단위다.** 한 장이 여러 상자로 쪼개져 있으면
+    # 합쳐서 본다 - 조각마다 돌리면 이음매가 단부가 되고, 같은 구멍이 조각
+    # 수만큼 중복된다(실측: 단부 236개·개구부 236개가 생겼다).
+    plates = _merge_groups(slabs)
     scaffolds = [b for b in solids if b.kind == "scaffold"]
 
     # ── R1 슬래브 단부 ────────────────────────────────────────────────
     # 슬래브 상면 가장자리에서 EDGE_BAND_M 안쪽까지. 떨어짐.
     # 근거: 산업안전보건기준에 관한 규칙 제43조 — 작업발판 끝·개구부에
     #       안전난간·덮개 등 방호 조치 의무. 그 대상 자리가 곧 위험구역이다.
-    for b in slabs:
+    # **한 판이 여러 상자로 쪼개져 있으면 합쳐서 본다** (2026-08-27).
+    #
+    # 도면의 요철을 살리려고 슬래브 한 장을 여러 상자로 나눈 뒤, 상자마다
+    # 테두리를 두르니 **조각 사이 이음매까지 단부가 됐다.** 실제 단부가 아니다
+    # (236개가 생겼다). building.json 이 `group` 으로 한 장임을 밝히면 그
+    # 바깥 테두리만 단부로 본다. group 이 없으면 종전대로 상자마다 두른다.
+    for b in plates:
         out.append({
             "name": "slab_edge",
             "label": f"슬래브 단부 (EL {b.z2:g}m)",
-            "hazard": "떨어짐", "kind": "rect",
-            "areas": _ring(b.x1, b.y1, b.x2, b.y2, EDGE_BAND_M),
+            "hazard": "떨어짐", "kind": _box_ring(b, EDGE_BAND_M)[0],
+            "areas": _box_ring(b, EDGE_BAND_M)[1],
             "z_min": round(b.z2, 3), "z_max": round(b.z2 + WORK_BAND_M, 3),
             "source": "derived:R1_slab_edge",
             "rule": f"슬래브 상면 가장자리 {EDGE_BAND_M}m 밴드. "
@@ -109,7 +221,7 @@ def derive(solids: list, top_slab_only: bool = True) -> list:
         x2 = max(b.x2 for b in scaffolds); y2 = max(b.y2 for b in scaffolds)
         t = min(b.x2 - b.x1 for b in scaffolds if b.x2 - b.x1 < (x2 - x1) / 2)
         ix1, iy1, ix2, iy2 = x1 + t, y1 + t, x2 - t, y2 - t
-        for b in slabs:
+        for b in plates:
             out.append({
                 "name": "gangform_workface",
                 "label": f"갱폼 작업면 (EL {b.z2:g}m)",
@@ -125,14 +237,20 @@ def derive(solids: list, top_slab_only: bool = True) -> list:
     # **어느 층인지는 기하가 아니라 공정표가 정한다** — data/schedule.json 이
     # 그 시간대를 켠다. 기하는 "어디"만 답하고 "언제"는 공정이 답한다.
     # 근거: 같은 규칙 제334조(콘크리트 타설 작업) 거푸집·동바리 붕괴 방지.
-    if slabs:
-        targets = slabs[-1:] if top_slab_only else slabs
+    if plates:
+        # **최상층의 판 전부**다. 종전에는 `slabs[-1:]` — 목록의 마지막 상자
+        # 하나였다. 판 하나가 상자 하나이던 시절에는 그것이 곧 최상층 한 동의
+        # 판이었지만, 도면의 요철을 살리며 판을 여러 상자로 쪼갠 뒤로는 조각
+        # 하나만 잡혀 구역이 1,280셀에서 10셀로 줄었다(2026-08-27 실측).
+        # 높이로 고른다 — 목록 순서에 기대지 않는다.
+        zmax = max(b.z2 for b in plates)
+        targets = [b for b in plates if abs(b.z2 - zmax) < 1e-6]                   if top_slab_only else plates
         for b in targets:
             out.append({
                 "name": "concrete_pour",
                 "label": f"타설·거푸집 설치면 (EL {b.z2:g}m)",
-                "hazard": "무너짐", "kind": "rect",
-                "areas": [[b.x1, b.y1, b.x2, b.y2]],
+                "hazard": "무너짐", "kind": _box_face(b)[0],
+                "areas": _box_face(b)[1],
                 "z_min": round(b.z2, 3), "z_max": round(b.z2 + WORK_BAND_M, 3),
                 "source": "derived:R3_pour_deck",
                 "rule": "최상층 슬래브 상면 전체. 층 선택은 공정표(schedule.json)가 한다. "
@@ -146,7 +264,7 @@ def derive(solids: list, top_slab_only: bool = True) -> list:
     #       R1 이 판의 바깥 테두리를, R4 가 구멍의 테두리를 맡는다.
     # **구멍 좌표는 도출이 아니라 입력이다**(T2). building.json 이 주지 않으면
     #       이 규칙은 아무것도 내지 않는다 — 없는 구멍을 지어내지 않는다.
-    for b in slabs:
+    for b in plates:
         for k, op in enumerate(getattr(b, "openings", ()) or ()):
             ox1, oy1, ox2, oy2 = op
             out.append({

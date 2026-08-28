@@ -1,0 +1,533 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>도면 디지타이저 — 2D 도면에서 현장 모델 만들기</title>
+<link rel="icon" href="data:,">
+<!--
+  2D 도면 -> 2.5D 현장 모델 (2026-08-27)
+
+  **왜 반자동인가.** DWG 파싱이나 래스터 벡터화로 도면을 자동 인식하는 것은
+  그 자체가 하나의 연구다. 여기서 필요한 것은 그것이 아니라, 담당자가 이미
+  갖고 있는 도면에서 **광선을 막는 직육면체 목록**을 뽑아내는 일이다. 몇 번의
+  클릭으로 끝나고, 결과를 눈으로 검증할 수 있다.
+
+  **계약을 채우는 자리다.** `data/building.json` 은 "축정렬(또는 연직축 회전)
+  직육면체 목록" 이라는 계약이고, IFC·DWG·현장 실측·이 화면이 모두 그 계약의
+  생산자다. `tools/ifc_to_building.py` 가 IFC 생산자이고 이 파일이 2D 도면
+  생산자다. 뒤쪽(복셀화·광선투사·검출확률)은 생산자가 누구든 그대로다.
+
+  **한계를 화면에 적어 둔다.** 축척은 사용자가 아는 거리로 보정하며, 스캔본
+  판독이라 오차가 있다. 동의 회전각도 사용자가 읽어 넣는다. 슬래브는 층마다
+  같은 외곽으로 복제되며 실제 평면 변화(세대 타입 변경 등)를 반영하지 않는다.
+  전부 이 화면에서 말하고, 내보낸 파일의 `_derivation` 에도 남긴다.
+
+  단일 파일이며 빌드도 서버도 필요 없다. 브라우저에서 그냥 연다.
+-->
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --line:#d8dde3; --ink:#16191d; --dim:#5c6570;
+    --accent:#1c5fd0; --warn:#a62a2a; --ok:#1d6b3f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.55 "Malgun Gothic","맑은 고딕",system-ui,sans-serif;
+       background:var(--bg);color:var(--ink)}
+  header{display:flex;align-items:baseline;gap:14px;padding:12px 18px;
+         background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:16px;margin:0}
+  header p{margin:0;color:var(--dim);font-size:12px}
+  .wrap{display:grid;grid-template-columns:330px 1fr;gap:14px;padding:14px 18px;
+        align-items:start}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+         padding:12px 14px;margin-bottom:12px}
+  .panel h2{font-size:13px;margin:0 0 8px;display:flex;justify-content:space-between;
+            align-items:baseline}
+  .panel h2 .n{font-weight:400;color:var(--dim);font-size:11px}
+  label{display:block;font-size:12px;color:var(--dim);margin:7px 0 3px}
+  input[type=number],input[type=text],select{width:100%;padding:5px 7px;
+    border:1px solid var(--line);border-radius:4px;font:inherit;font-size:13px}
+  .row{display:flex;gap:6px;flex-wrap:wrap}
+  .row>*{flex:1}
+  button{padding:6px 10px;border:1px solid var(--line);background:#fff;
+         border-radius:4px;font:inherit;font-size:12px;cursor:pointer}
+  button:hover{background:#eef2f7}
+  button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.danger{color:var(--warn)}
+  button.go{background:var(--accent);border-color:var(--accent);color:#fff;
+            font-weight:700}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .hint{font-size:11.5px;color:var(--dim);margin:6px 0 0}
+  .hint b{color:var(--ink)}
+  .warn{color:var(--warn)}
+  canvas{display:block;width:100%;height:74vh;background:#fff;
+         border:1px solid var(--line);border-radius:6px;cursor:crosshair}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  td{padding:3px 4px;border-bottom:1px solid #eef1f4;vertical-align:top}
+  td.num{text-align:right;color:var(--dim);white-space:nowrap}
+  .bar{padding:8px 12px;background:#eaf1fc;border:1px solid #c3d7f5;
+       border-radius:5px;font-size:12.5px;margin-bottom:10px}
+  .bar.bad{background:#fdeceb;border-color:#f2c3c0}
+  code{background:#eef1f4;padding:1px 4px;border-radius:3px;font-size:12px}
+</style>
+
+<header>
+  <h1>도면 디지타이저</h1>
+  <p>2D 도면에서 <b>광선을 막는 직육면체 목록</b>을 뽑아 <code>data/building.json</code> 으로 낸다</p>
+</header>
+
+<div class="wrap">
+<div>
+
+  <div class="panel">
+    <h2>① 도면 열기</h2>
+    <input type="file" id="file" accept="image/*">
+    <p class="hint">배치도·건축물현황도 등 <b>축척을 아는</b> 도면을 쓴다.
+      이미지는 브라우저 안에만 있고 어디로도 올라가지 않는다.</p>
+  </div>
+
+  <div class="panel">
+    <h2>② 축척 <span class="n" id="scaleNote">미설정</span></h2>
+    <button id="mScale">두 점으로 축척 잡기</button>
+    <label for="realLen">두 점 사이 실제 거리 (m)</label>
+    <input type="number" id="realLen" value="50" min="0.1" step="0.1">
+    <p class="hint">도면의 <b>축척 막대</b>나 길이를 아는 변 두 끝을 찍는다.
+      스캔본 판독이라 오차가 남는다 — 내보낸 파일에 기록된다.</p>
+  </div>
+
+  <div class="panel">
+    <h2>③ 대지 <span class="n" id="siteNote">미설정</span></h2>
+    <button id="mSite">대지 경계 그리기</button>
+    <p class="hint">드래그해 대지를 감싼다. <b>좌하단이 원점(0,0)</b> 이 되고
+      모든 좌표가 여기서부터 매겨진다.</p>
+  </div>
+
+  <div class="panel">
+    <h2>④ 층 <span class="n" id="storeyNote"></span></h2>
+    <div class="row">
+      <div><label for="nStorey">진행 층수</label>
+        <input type="number" id="nStorey" value="5" min="1" max="30"></div>
+      <div><label for="hStorey">층고 (m)</label>
+        <input type="number" id="hStorey" value="2.9" min="1.5" step="0.1"></div>
+    </div>
+    <label for="tSlab">슬래브 두께 (m)</label>
+    <input type="number" id="tSlab" value="0.3" min="0.1" step="0.05">
+    <p class="hint">CCTV 배치 검토는 <b>골조 공사 중</b>에 한다. 최상층이 아니라
+      <b>지금 올라간 층</b>까지만 넣는다.</p>
+  </div>
+
+  <div class="panel">
+    <h2>⑤ 요소 그리기 <span class="n" id="objNote">0개</span></h2>
+    <div class="row" id="modes">
+      <button data-m="" class="on">끔</button>
+      <button data-m="dong">동</button>
+      <button data-m="core">코어</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button data-m="stack">적치장</button>
+      <button data-m="fence">가설 펜스</button>
+    </div>
+    <label for="yaw">회전각 (도) — 사선으로 앉은 동</label>
+    <input type="number" id="yaw" value="0" step="0.5">
+    <p class="hint">드래그로 사각형을 그린다. <b>동</b>은 층마다 슬래브와 외곽
+      비계를 함께 만든다. <b>코어</b>는 동 안에 그리며 승강로·계단실이라
+      슬래브에 구멍으로도 들어간다.</p>
+    <table id="objTable"><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <h2>⑥ 내보내기</h2>
+    <label for="srcNote">도면 출처 (파일에 기록된다)</label>
+    <input type="text" id="srcNote" placeholder="예: 건축물현황도(세움터 발급 …), 축척 1:2000">
+    <div class="row" style="margin-top:8px">
+      <button id="save" class="go" disabled>building.json 내려받기</button>
+    </div>
+    <p class="hint">받은 파일을 <code>data/building.json</code> 에 두고
+      <code>python src/export_site.py</code> 를 돌리면 배치 화면이 그 현장으로 바뀐다.</p>
+  </div>
+
+</div>
+
+<div>
+  <div class="bar" id="guide">도면을 열고 ② 축척부터 잡는다.</div>
+  <canvas id="cv"></canvas>
+  <p class="hint" id="limits"></p>
+</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var cv = $('cv'), ctx = cv.getContext('2d');
+
+  var IMG = null;              // 도면 이미지
+  var VIEW = { s: 1, ox: 0, oy: 0 };   // 이미지 -> 화면
+  var MPP = null;              // m per pixel (이미지 픽셀 기준)
+  var SITE = null;             // {x1,y1,x2,y2} 이미지 픽셀
+  var OBJ = [];                // {kind, x1,y1,x2,y2 (이미지 픽셀), yaw}
+  var MODE = '';               // '' | scale | site | dong | core | stack | fence
+  var DRAG = null;
+  var SCALE_PTS = [];
+
+  var KIND_KO = { dong: '동', core: '코어', stack: '적치장', fence: '가설 펜스' };
+  var KIND_COLOR = { dong: '#1c5fd0', core: '#7a3fb5', stack: '#a8760f',
+                     fence: '#1d6b3f' };
+
+  /* ── 화면 ─────────────────────────────────────────────────────────── */
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(cv.clientWidth * dpr);
+    cv.height = Math.round(cv.clientHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fit();
+  }
+  function fit() {
+    if (!IMG) { draw(); return; }
+    var W = cv.clientWidth, H = cv.clientHeight;
+    VIEW.s = Math.min(W / IMG.width, H / IMG.height);
+    VIEW.ox = (W - IMG.width * VIEW.s) / 2;
+    VIEW.oy = (H - IMG.height * VIEW.s) / 2;
+    draw();
+  }
+  var toScreen = function (p) {
+    return { x: VIEW.ox + p.x * VIEW.s, y: VIEW.oy + p.y * VIEW.s };
+  };
+  var toImage = function (x, y) {
+    return { x: (x - VIEW.ox) / VIEW.s, y: (y - VIEW.oy) / VIEW.s };
+  };
+
+  function rectScreen(r) {
+    var a = toScreen({ x: Math.min(r.x1, r.x2), y: Math.min(r.y1, r.y2) });
+    var b = toScreen({ x: Math.max(r.x1, r.x2), y: Math.max(r.y1, r.y2) });
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, cv.clientWidth, cv.clientHeight);
+    if (!IMG) {
+      ctx.fillStyle = '#8b939c'; ctx.font = '14px sans-serif';
+      ctx.fillText('① 에서 도면 이미지를 연다', 20, 34);
+      return;
+    }
+    ctx.drawImage(IMG, VIEW.ox, VIEW.oy, IMG.width * VIEW.s, IMG.height * VIEW.s);
+
+    if (SITE) {
+      var s = rectScreen(SITE);
+      ctx.save();
+      ctx.strokeStyle = '#16191d'; ctx.lineWidth = 1.6; ctx.setLineDash([7, 4]);
+      ctx.strokeRect(s.x, s.y, s.w, s.h);
+      ctx.setLineDash([]);
+      // 원점 표시 — 좌하단이 (0,0) 이다. 헷갈리기 쉬워 화면에 못 박는다.
+      ctx.fillStyle = '#16191d';
+      ctx.beginPath(); ctx.arc(s.x, s.y + s.h, 4, 0, 6.284); ctx.fill();
+      ctx.font = '11px sans-serif';
+      ctx.fillText('(0, 0)', s.x + 7, s.y + s.h - 6);
+      ctx.restore();
+    }
+
+    OBJ.forEach(function (o, i) {
+      var r = rectScreen(o);
+      ctx.save();
+      if (o.yaw) {
+        ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+        ctx.rotate(-o.yaw * Math.PI / 180);   // 화면 y 가 뒤집혀 부호가 반대다
+        ctx.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
+      }
+      ctx.strokeStyle = KIND_COLOR[o.kind]; ctx.lineWidth = 1.6;
+      ctx.fillStyle = KIND_COLOR[o.kind] + '1f';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = KIND_COLOR[o.kind]; ctx.font = '11px sans-serif';
+      ctx.fillText(KIND_KO[o.kind] + (i + 1) + (o.yaw ? ' ' + o.yaw + '°' : ''),
+                   r.x + 3, r.y + 13);
+      ctx.restore();
+    });
+
+    SCALE_PTS.forEach(function (p) {
+      var q = toScreen(p);
+      ctx.fillStyle = '#a62a2a';
+      ctx.beginPath(); ctx.arc(q.x, q.y, 4, 0, 6.284); ctx.fill();
+    });
+    if (SCALE_PTS.length === 2) {
+      var a = toScreen(SCALE_PTS[0]), b = toScreen(SCALE_PTS[1]);
+      ctx.strokeStyle = '#a62a2a'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+
+    if (DRAG) {
+      var d = rectScreen(DRAG);
+      ctx.save();
+      ctx.strokeStyle = MODE === 'site' ? '#16191d' : (KIND_COLOR[MODE] || '#888');
+      ctx.setLineDash([5, 3]); ctx.lineWidth = 1.4;
+      ctx.strokeRect(d.x, d.y, d.w, d.h);
+      ctx.setLineDash([]);
+      if (MPP) {
+        var wm = Math.abs(DRAG.x2 - DRAG.x1) * MPP;
+        var hm = Math.abs(DRAG.y2 - DRAG.y1) * MPP;
+        ctx.fillStyle = '#16191d'; ctx.font = '12px sans-serif';
+        ctx.fillText(wm.toFixed(1) + ' x ' + hm.toFixed(1) + ' m', d.x + 4, d.y - 5);
+      }
+      ctx.restore();
+    }
+  }
+
+  /* ── 입력 ─────────────────────────────────────────────────────────── */
+  function at(ev) {
+    var r = cv.getBoundingClientRect();
+    return toImage(ev.clientX - r.left - cv.clientLeft,
+                   ev.clientY - r.top - cv.clientTop);
+  }
+
+  cv.addEventListener('pointerdown', function (ev) {
+    if (!IMG || !MODE) return;
+    var p = at(ev);
+    if (MODE === 'scale') {
+      SCALE_PTS.push(p);
+      if (SCALE_PTS.length === 2) {
+        var dx = SCALE_PTS[1].x - SCALE_PTS[0].x;
+        var dy = SCALE_PTS[1].y - SCALE_PTS[0].y;
+        var px = Math.hypot(dx, dy);
+        var real = parseFloat($('realLen').value);
+        if (px < 5 || !(real > 0)) {
+          SCALE_PTS = []; say('두 점이 너무 가깝거나 거리가 비었다', true);
+        } else {
+          MPP = real / px;
+          setMode('');
+          say('축척 ' + MPP.toFixed(4) + ' m/px. 다음은 ③ 대지 경계.');
+        }
+      }
+      sync(); draw(); return;
+    }
+    DRAG = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+    cv.setPointerCapture(ev.pointerId);
+  });
+  cv.addEventListener('pointermove', function (ev) {
+    if (!DRAG) return;
+    var p = at(ev); DRAG.x2 = p.x; DRAG.y2 = p.y; draw();
+  });
+  function endDrag() {
+    if (!DRAG) return;
+    var d = DRAG; DRAG = null;
+    var r = { x1: Math.min(d.x1, d.x2), y1: Math.min(d.y1, d.y2),
+              x2: Math.max(d.x1, d.x2), y2: Math.max(d.y1, d.y2) };
+    if (r.x2 - r.x1 < 4 || r.y2 - r.y1 < 4) { draw(); return; }
+    if (MODE === 'site') {
+      SITE = r; setMode('');
+      say('대지 ' + fmtSite() + '. 다음은 ⑤ 에서 동을 그린다.');
+    } else {
+      r.kind = MODE;
+      r.yaw = parseFloat($('yaw').value) || 0;
+      OBJ.push(r);
+    }
+    sync(); draw();
+  }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', function () { DRAG = null; draw(); });
+
+  function setMode(m) {
+    MODE = m;
+    if (m !== 'scale') SCALE_PTS = [];
+    Array.prototype.forEach.call($('modes').children, function (b) {
+      b.classList.toggle('on', b.dataset.m === m);
+    });
+    $('mScale').classList.toggle('on', m === 'scale');
+    $('mSite').classList.toggle('on', m === 'site');
+    cv.style.cursor = m ? 'cell' : 'crosshair';
+  }
+
+  $('mScale').onclick = function () {
+    if (!IMG) return say('먼저 도면을 연다', true);
+    SCALE_PTS = []; setMode('scale');
+    say('축척을 잴 두 점을 찍는다. 실제 거리는 왼쪽에 적어 둔 값을 쓴다.');
+    draw();
+  };
+  $('mSite').onclick = function () {
+    if (!MPP) return say('② 축척을 먼저 잡는다', true);
+    setMode('site'); say('대지를 감싸 드래그한다. 좌하단이 원점이 된다.');
+  };
+  $('modes').onclick = function (e) {
+    if (e.target.dataset.m == null) return;
+    if (!SITE) return say('③ 대지 경계를 먼저 그린다', true);
+    setMode(e.target.dataset.m);
+  };
+  $('objTable').onclick = function (e) {
+    var i = e.target.dataset.rm;
+    if (i == null) return;
+    OBJ.splice(+i, 1); sync(); draw();
+  };
+
+  $('file').onchange = function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var img = new Image();
+    img.onload = function () {
+      IMG = img; MPP = null; SITE = null; OBJ = []; SCALE_PTS = [];
+      setMode(''); sync(); fit();
+      say('도면을 열었다 (' + img.width + 'x' + img.height + 'px). ② 축척부터.');
+    };
+    img.onerror = function () { say('이미지를 읽지 못했다', true); };
+    img.src = URL.createObjectURL(f);
+  };
+
+  ['nStorey', 'hStorey', 'tSlab'].forEach(function (id) {
+    $(id).oninput = sync;
+  });
+
+  /* ── 상태 표시 ────────────────────────────────────────────────────── */
+  function say(msg, bad) {
+    var g = $('guide');
+    g.innerHTML = msg;
+    g.className = 'bar' + (bad ? ' bad' : '');
+  }
+  function fmtSite() {
+    if (!SITE || !MPP) return '미설정';
+    return ((SITE.x2 - SITE.x1) * MPP).toFixed(1) + ' x '
+         + ((SITE.y2 - SITE.y1) * MPP).toFixed(1) + ' m';
+  }
+  function levels() {
+    var n = Math.max(1, +$('nStorey').value | 0), h = +$('hStorey').value || 2.9;
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(Math.round(i * h * 100) / 100);
+    return out;
+  }
+  function sync() {
+    $('scaleNote').textContent = MPP ? MPP.toFixed(4) + ' m/px' : '미설정';
+    $('siteNote').textContent = fmtSite();
+    var lv = levels();
+    $('storeyNote').textContent = 'EL ' + lv.join(' / ') + ' m';
+    var n = {};
+    OBJ.forEach(function (o) { n[o.kind] = (n[o.kind] || 0) + 1; });
+    $('objNote').textContent = OBJ.length
+      ? Object.keys(n).map(function (k) { return KIND_KO[k] + ' ' + n[k]; }).join(' · ')
+      : '0개';
+    var tb = $('objTable').querySelector('tbody');
+    tb.innerHTML = !OBJ.length
+      ? '<tr><td style="color:var(--dim)">그린 것이 없다</td></tr>'
+      : OBJ.map(function (o, i) {
+          var w = ((o.x2 - o.x1) * MPP).toFixed(1), d = ((o.y2 - o.y1) * MPP).toFixed(1);
+          return '<tr><td>' + KIND_KO[o.kind] + (o.yaw ? ' ' + o.yaw + '°' : '')
+               + '</td><td class="num">' + w + '×' + d + 'm</td>'
+               + '<td style="width:26px"><button data-rm="' + i + '">×</button></td></tr>';
+        }).join('');
+    var ok = !!(IMG && MPP && SITE && OBJ.some(function (o) { return o.kind === 'dong'; }));
+    $('save').disabled = !ok;
+    $('limits').innerHTML = ok
+      ? '이 변환의 한계 — 축척은 클릭 두 점으로 잡았고 스캔본 판독 오차가 남는다. '
+        + '회전각은 도면에서 읽어 넣은 값이다. <b>슬래브는 층마다 같은 외곽으로 '
+        + '복제되며</b> 층별 평면 변화를 반영하지 않는다. 비계는 동 외곽에서 '
+        + '1m 띄운 띠로 자동 생성하며 실제 설치 범위가 아니다. 이 문장들은 '
+        + '내보낸 파일의 <code>_derivation</code> 에도 들어간다.'
+      : '';
+  }
+
+  /* ── 좌표 변환 ────────────────────────────────────────────────────── */
+  /* 이미지 픽셀 -> 현장 미터. 원점은 대지 좌하단이고 y 는 위로 간다.
+     도면 이미지의 y 는 아래로 가므로 여기서 뒤집는다. 이 뒤집기를 빠뜨리면
+     현장이 상하로 뒤집힌 채 모든 계산이 조용히 돌아간다. */
+  function toM(o) {
+    var H = SITE.y2 - SITE.y1;
+    return {
+      x1: Math.round((o.x1 - SITE.x1) * MPP * 100) / 100,
+      y1: Math.round((H - (o.y2 - SITE.y1)) * MPP * 100) / 100,
+      x2: Math.round((o.x2 - SITE.x1) * MPP * 100) / 100,
+      y2: Math.round((H - (o.y1 - SITE.y1)) * MPP * 100) / 100,
+    };
+  }
+  function inside(a, b) {   // a 의 중심이 b 안인가 (코어를 동에 매다는 데 쓴다)
+    var cx = (a.x1 + a.x2) / 2, cy = (a.y1 + a.y2) / 2;
+    return cx >= b.x1 && cx <= b.x2 && cy >= b.y1 && cy <= b.y2;
+  }
+
+  function build() {
+    var lv = levels(), t = +$('tSlab').value || 0.3;
+    var top = lv[lv.length - 1] + t;      // 코어는 최상 슬래브 위까지 선다
+    var dongs = OBJ.filter(function (o) { return o.kind === 'dong'; });
+    var cores = OBJ.filter(function (o) { return o.kind === 'core'; });
+    var solids = [];
+
+    dongs.forEach(function (d, di) {
+      var m = toM(d), tag = '동' + (di + 1);
+      // 이 동에 속한 코어 — 슬래브 관통부가 되고, 그 자체로 벽체가 된다
+      var mine = cores.filter(function (c) { return inside(c, d); }).map(toM);
+      mine.forEach(function (c) {
+        solids.push({ kind: 'core', box: [c.x1, c.y1, 0.0, c.x2, c.y2, top],
+                      yaw_deg: d.yaw || 0,
+                      note: tag + ' 계단실·엘리베이터 코어', source: '도면' });
+      });
+      // 슬래브 — 층마다. EL 0 은 지면이라 슬래브를 두지 않는다.
+      lv.forEach(function (z) {
+        if (z <= 0) return;
+        solids.push({
+          kind: 'slab',
+          box: [m.x1, m.y1, Math.round((z - t) * 100) / 100, m.x2, m.y2, z],
+          yaw_deg: d.yaw || 0,
+          note: tag + ' 슬래브 (두께 ' + t + 'm)',
+          openings: mine.map(function (c) { return [c.x1, c.y1, c.x2, c.y2]; }),
+          openings_source: '도면: 코어 관통부',
+        });
+      });
+      // 외곽 비계 — 동을 1m 띄워 두른 네 띠. 실제 설치 범위가 아니라 모사다.
+      var g = 1.0, w = 0.9;
+      [[m.x1 - g - w, m.y1 - g - w, m.x2 + g + w, m.y1 - g],
+       [m.x1 - g - w, m.y2 + g, m.x2 + g + w, m.y2 + g + w],
+       [m.x1 - g - w, m.y1 - g, m.x1 - g, m.y2 + g],
+       [m.x2 + g, m.y1 - g, m.x2 + g + w, m.y2 + g]].forEach(function (b, bi) {
+        solids.push({ kind: 'scaffold', box: [b[0], b[1], 0.0, b[2], b[3], top],
+                      yaw_deg: d.yaw || 0, coverage: null,
+                      note: tag + ' 외곽 비계 ' + (bi + 1),
+                      source: '가설계획 모사' });
+      });
+    });
+
+    OBJ.filter(function (o) { return o.kind === 'stack' || o.kind === 'fence'; })
+       .forEach(function (o, i) {
+      var m = toM(o);
+      var h = o.kind === 'stack' ? 2.5 : 2.0;
+      solids.push({ kind: o.kind, box: [m.x1, m.y1, 0.0, m.x2, m.y2, h],
+                    yaw_deg: o.yaw || 0,
+                    coverage: o.kind === 'fence' ? 1.0 : 1.0,
+                    note: KIND_KO[o.kind] + (i + 1), source: '가설계획' });
+    });
+
+    var W = Math.round((SITE.x2 - SITE.x1) * MPP * 10) / 10;
+    var D = Math.round((SITE.y2 - SITE.y1) * MPP * 10) / 10;
+    return {
+      _about: '골조 형상 — 사용자 입력',
+      _source: $('srcNote').value || '(도면 출처를 적지 않았다)',
+      _derivation: '도면 디지타이저(mockup/digitize.html)로 옮겼다. 축척은 '
+        + '두 점 클릭으로 ' + MPP.toFixed(4) + ' m/px 로 잡았고 스캔본 판독 '
+        + '오차가 남는다. 대지 ' + W + ' x ' + D + ' m. 층은 EL '
+        + lv.join('/') + ' m 이며 CCTV 배치 검토는 골조 공사 중에 하므로 '
+        + '지금 올라간 층까지만 넣는다.',
+      _limits: '슬래브는 층마다 같은 외곽으로 복제되며 층별 평면 변화를 '
+        + '반영하지 않는다. 외곽 비계는 동에서 1m 띄운 폭 0.9m 띠로 자동 '
+        + '생성한 모사이며 실제 설치 범위가 아니다. 회전각은 도면에서 읽어 '
+        + '넣은 값이라 사선 동에서 오차가 있다.',
+      _rotation: '연직축 회전만 쓴다. box 는 회전 전 좌표이며 중심을 축으로 '
+        + 'yaw_deg 만큼 돌린 것이 실형상이다.',
+      _coverage: '1.0 은 속이 찬 것, 1.0 미만은 비계처럼 사이가 비어 보이는 것. '
+        + 'null 이면 config.SCAFFOLD_COVERAGE 를 쓴다 — 민감도 스윕 대상이다.',
+      _units: '미터. 원점은 대지 좌하단, z 는 지면에서 위로',
+      site: { width_m: W, depth_m: D, note: $('srcNote').value || '' },
+      storey_levels_m: lv,
+      solids: solids,
+    };
+  }
+
+  $('save').onclick = function () {
+    var doc;
+    try { doc = build(); }
+    catch (e) { return say('내보내지 못했다: ' + e.message, true); }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 1)],
+                                          { type: 'application/json' }));
+    a.download = 'building.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    say('<b>building.json</b> 을 내려받았다 · 솔리드 ' + doc.solids.length + '개. '
+        + '<code>data/building.json</code> 에 두고 '
+        + '<code>python src/export_site.py</code> 를 돌린다.');
+  };
+
+  addEventListener('resize', resize, { passive: true });
+  resize(); sync();
+})();
+</script>

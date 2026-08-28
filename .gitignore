@@ -65,3 +65,11 @@ docs/reference/papers/_*.txt
 
 # 워드 잠금 파일 — 문서를 열어두면 생긴다
 outputs/~$*
+
+# 쌍 캐시 — 3GB 넘는다. 기하가 바뀌면 재생성된다
+outputs/_pairs_cache.pkl
+outputs/_report_full.log
+
+# 평가 산출 원본 — 단지 전체에서 170MB 가 넘어 GitHub 한도(100MB)를 넘는다.
+# report.py 가 언제든 다시 만든다. 배포본은 mockup/data.json (슬림 24MB) 이다.
+outputs/site_eval.json

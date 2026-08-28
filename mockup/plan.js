@@ -3,10 +3,11 @@
  * 나머지 화면은 전부 **결과**(히트맵·미달구역·WDR)다. 그런데 심사자가 먼저
  * 묻는 것은 "그래서 어떤 현장을 잰 건가" 다. 그 입력을 보여주는 화면이 없었다.
  *
- * **원본 도면에서 뽑아온 것이 아니다.** CLAUDE.md §5.1 이 "BIM 파일 불필요,
- * 코드로 직육면체 조합 생성" 으로 정했고 site_model.py 가 수치를 박아 만든다.
- * 여기 그리는 것은 그 가상 현장의 평면이며, 실제 LH 현장 도면이 아니다.
- * 화면에도 그렇게 적는다 — 도면으로 오인되면 심사에서 문제가 된다.
+ * **골조는 실제 도면에서 왔다** (2026-08-27 정정). 종전에는 site_model.py 가
+ * 수치를 박아 만든 가상 현장이었고 이 주석도 그렇게 적혀 있었다. 지금은
+ * 신내역 금강펜테리움 센트럴파크의 건축물현황도를 축척 1:2000 으로 읽어
+ * data/building.json 에 옮긴 것이다. **카메라 배치만 실제 계획서가 아니다** —
+ * 경계 등간격의 실무 관행 모사이며, 화면에도 그렇게 적는다.
  *
  * 새 수치를 만들지 않는다. solids 의 kind, voxels 의 zones, cameras 의 yaw_deg
  * 를 그대로 읽어 그린다.
@@ -149,6 +150,17 @@
         const p1 = this._p(b.x1, b.y2), p2 = this._p(b.x2, b.y1);
         const w = p2.x - p1.x, h = p2.y - p1.y;
         ctx.save();
+        /* **사선으로 앉은 동을 눕혀 그리지 않는다** (2026-08-27).
+         *
+         * `yaw_deg` 는 계산에는 줄곧 들어갔는데(geometry 가 광선을 상자의 로컬
+         * 좌표로 돌려 푼다) 그리기만 축정렬로 남아 있었다. 404·405동이
+         * -24°/-27° 라, 도면에는 반듯한 건물이 서 있는데 히트맵에는 비스듬한
+         * 그림자가 지는 어긋남이 났다. 상자 중심을 축으로 돌린다.
+         * 화면 y 가 아래로 가므로 부호가 반대다. */
+        if (b.yaw_deg) {
+          const cx = p1.x + w / 2, cy = p1.y + h / 2;
+          ctx.translate(cx, cy); ctx.rotate(-b.yaw_deg * DEG); ctx.translate(-cx, -cy);
+        }
         ctx.fillStyle = st.fill; ctx.fillRect(p1.x, p1.y, w, h);
         if (st.hatch) {                       // 코어는 해칭 — 도면 관례
           ctx.save();
@@ -201,7 +213,7 @@
       ctx.fillText(S.depth_m + ' m', 0, 0);
       ctx.restore();
 
-      // 방위 — 도면에는 북이 있어야 한다. +y 를 북으로 둔다(가상 현장이므로 규약)
+      // 방위 — 도면에는 북이 있어야 한다. +y 를 북으로 둔다(도면 좌표계의 규약)
       const nx = f.ox + f.w - 14, ny = f.oy + 14;
       ctx.strokeStyle = '#16191d'; ctx.fillStyle = '#16191d';
       ctx.beginPath(); ctx.moveTo(nx, ny + 12); ctx.lineTo(nx, ny - 6);

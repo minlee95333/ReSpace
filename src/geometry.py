@@ -45,9 +45,22 @@ YAW_STEP_DEG = 15                      # 24방위. 난수 없이 전수 탐색�
 
 
 def _ray_hits_box(p0, p1, box) -> bool:
-    """선분 p0→p1 이 축정렬 상자를 지나는가. 슬랩 방식."""
+    """선분 p0→p1 이 상자를 지나는가. 슬랩 방식.
+
+    회전 상자는 두 끝점을 상자의 로컬 좌표로 옮겨 같은 판정을 쓴다
+    (occlusion_row 와 같은 방법이다).
+    """
+    if getattr(box, "rotated", False):
+        ax, ay = box.to_local_xy(p0[0], p0[1])
+        bx, by = box.to_local_xy(p1[0], p1[1])
+        hx, hy = box.half_xy
+        p0 = (ax, ay, p0[2])
+        p1 = (bx, by, p1[2])
+        spans = ((-hx, hx), (-hy, hy), (box.z1, box.z2))
+    else:
+        spans = ((box.x1, box.x2), (box.y1, box.y2), (box.z1, box.z2))
     t_min, t_max = 0.0, 1.0
-    for i, (lo, hi) in enumerate(((box.x1, box.x2), (box.y1, box.y2), (box.z1, box.z2))):
+    for i, (lo, hi) in enumerate(spans):
         o, d = p0[i], p1[i] - p0[i]
         if abs(d) < 1e-12:
             if o < lo or o > hi:
@@ -62,14 +75,25 @@ def _ray_hits_box(p0, p1, box) -> bool:
     return True
 
 
-def occlusion_ratio(vx: float, vy: float, cam, solids: list) -> float:
-    """복셀에 세운 사람 막대가 얼마나 가려지는가 (§5.2)."""
+def occlusion_ratio(vx: float, vy: float, cam, solids: list,
+                    stand_z: float = 0.0) -> float:
+    """복셀에 세운 사람 막대가 얼마나 가려지는가 (§5.2).
+
+    `stand_z` 는 **딛는 면의 높이**이며 막대는 거기서 시작한다 (2026-08-27).
+    종전에는 이 인자가 없어 막대를 항상 지면에 세웠고, 3층 슬래브 위 작업자를
+    지상에 세워놓고 가림을 재어 **상부층이 통째로 틀렸다.** 복셀마다 `floor_z`
+    를 저장해 두고도 여기서 읽지 않고 있었다.
+
+    브라우저 구현(`mockup/engine.js`)과 대조해 드러났다 — 지면 복셀은 4,780건
+    전수 일치했는데 상부층만 6.5~8.5% 어긋났다. `tools/test_engine.mjs` 가
+    이 대조를 고정한다.
+    """
     n = config.OCCLUSION_SAMPLE_POINTS
     top = config.OCCLUSION_BAR_HEIGHT_M
     cam_p = (cam.x, cam.y, cam.z)
     total = 0.0
     for i in range(n):
-        z = top * i / (n - 1)
+        z = stand_z + top * i / (n - 1)
         p0 = (vx, vy, z)
         # 여러 겹을 지나면 가장 많이 막는 것을 쓴다. 곱으로 누적하면 비계 두 겹만
         # 지나도 사실상 불투명이 되어 실제보다 어둡게 잡힌다.
@@ -104,24 +128,39 @@ def occlusion_row(cam, voxels: list, solids: list) -> list:
 
     vx = np.fromiter((v["x"] for v in voxels), float, len(voxels))
     vy = np.fromiter((v["y"] for v in voxels), float, len(voxels))
+    # **막대는 딛는 면에서 시작한다** (2026-08-27). 종전에는 zs 를 0 에서 띄워
+    # 복셀이 몇 층에 있든 지면에 세웠다. occlusion_ratio 의 주석 참조.
+    fz = np.fromiter((v.get("floor_z", 0.0) for v in voxels), float, len(voxels))
     zs = np.linspace(0.0, top, n)
 
     # (복셀, 샘플점) 격자로 편다
     ox = vx[:, None]                      # 광선 시점
     oy = vy[:, None]
-    oz = np.broadcast_to(zs, (len(voxels), n))
+    oz = fz[:, None] + zs[None, :]
     dx = cam.x - ox
     dy = cam.y - oy
     dz = cam.z - oz
 
     worst = np.zeros((len(voxels), n))
     for s in solids:
+        # **회전 상자는 광선을 상자의 로컬 좌표로 돌려서 푼다.** 슬랩 방식은
+        # 축정렬을 전제하므로, 상자를 돌리는 대신 광선을 반대로 돌리면 같은
+        # 코드를 그대로 쓸 수 있다. 연직축 회전이라 z 는 건드리지 않는다.
+        # yaw_deg 가 0 이면 아래 세 줄이 항등이라 기존과 완전히 같다.
+        if s.rotated:
+            lox, loy = s.to_local_xy(ox, oy)
+            ldx, ldy = s.to_local_xy(cam.x, cam.y)
+            ldx, ldy = ldx - lox, ldy - loy
+            shx, shy = s.half_xy
+            axes = ((lox, ldx, -shx, shx), (loy, ldy, -shy, shy),
+                    (oz, dz, s.z1, s.z2))
+        else:
+            axes = ((ox, dx, s.x1, s.x2), (oy, dy, s.y1, s.y2),
+                    (oz, dz, s.z1, s.z2))
         t_min = np.zeros_like(worst)
         t_max = np.ones_like(worst)
         ok = np.ones_like(worst, dtype=bool)
-        for o, d, lo, hi in ((ox, dx, s.x1, s.x2),
-                             (oy, dy, s.y1, s.y2),
-                             (oz, dz, s.z1, s.z2)):
+        for o, d, lo, hi in axes:
             par = np.abs(d) < 1e-12
             with np.errstate(divide="ignore", invalid="ignore"):
                 t1 = (lo - o) / d
@@ -179,7 +218,8 @@ def pair(voxel: dict, cam, solids: list, yaw: float,
                 "visible": False, "reason": "화각 밖"}
 
     if occ is None:
-        occ = occlusion_ratio(voxel["x"], voxel["y"], cam, solids)
+        occ = occlusion_ratio(voxel["x"], voxel["y"], cam, solids,
+                              voxel.get("floor_z", 0.0))
     visible = occ < 1.0
     return {
         "voxel_id": voxel["id"],

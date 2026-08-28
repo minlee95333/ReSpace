@@ -1,0 +1,114 @@
+{
+ "model": "separable_multiplicative",
+ "source": "literature",
+ "_about": "문헌 근거 곡선. 자체 실험 대신 공개 논문의 실측값에서 얻었다.",
+ "_sources": {
+  "gilroy2023": {
+   "cite": "Gilroy, S., Mullins, M., Jones, E., Parsi, A., Glavin, M. (2023). Replacing the human driver: An objective benchmark for occluded pedestrian detection. Biomimetic Intelligence and Robotics, 3(2), 100115.",
+   "doi": "10.1016/j.birob.2023.100115",
+   "arxiv": "2205.04812",
+   "what": "보행자 820 인스턴스, 가림률 0~99% 를 10구간으로, 검출모델 7종, 지표 mAP",
+   "figure": "Fig. 4 — Detection Performance by Occlusion Level (그래프에서 판독)"
+  },
+  "espcn2025": {
+   "cite": "ESPCN-YOLO: A High-Accuracy Framework for Personal Protective Equipment Detection Under Low-Light and Small Object Conditions. Buildings, 15(10), 1609.",
+   "url": "https://www.mdpi.com/2075-5309/15/10/1609",
+   "what": "건설현장 PPE 21,750장(사람·헬멧·조끼·신발), 거리 4~14m × 해상도 2종",
+   "table": "Table 4"
+  },
+  "shin2025": {
+   "cite": "Shin, Y., Seo, S., Koo, C. (2025). Deep learning-based automated method for enhancing excavator activity recognition in far-field construction site surveillance videos. Automation in Construction, 173, 106099.",
+   "what": "굴착기 활동인식, 27개 배치 시나리오(거리 3 × 높이 3 × 방위 3), 지표 가중 F1"
+  },
+  "dollar2009": {
+   "cite": "Dollár, P., Wojek, C., Schiele, B., Perona, P. (2009). Pedestrian Detection: A Benchmark. CVPR.",
+   "what": "Caltech — 픽셀 높이 구획 near >=80px(<20m) / medium 30~80px(20~60m) / far <=30px(>60m)"
+  }
+ },
+ "aggregate": "min",
+ "targets": [
+  "person"
+ ],
+ "primary": "person",
+ "per_target": {
+  "person": {
+   "model": "separable_multiplicative",
+   "target": "person_detection",
+   "detector": "literature (CenterNet / ESPCN-YOLO / Shin classifier)",
+   "detector_weights": "n/a — 문헌값",
+   "f_rho": {
+    "form": "logistic",
+    "L": 0.9995,
+    "k": 11.2802,
+    "x0": 6.2212,
+    "measured_range_px": [
+     5.71,
+     20.0
+    ],
+    "r2": 1.0,
+    "measured_on": "ESPCN-YOLO Buildings 2025 Table 4 (640x480 헬멧)",
+    "conversion": "640x480·화각90도 -> f_px=320, 헬멧 0.25m -> rho=80/d",
+    "extrapolation": "측정 범위 밖은 0 으로 본다"
+   },
+   "g_theta": {
+    "form": "logistic",
+    "params": {
+     "k": 0.242,
+     "x0": 61.36
+    },
+    "normalized_at": "theta=0",
+    "measured_range_deg": [
+     0.0,
+     75.0
+    ],
+    "_warning": "**이 축만 자체 실험 값을 그대로 뒀다.** 문헌은 점이 3개뿐이고(Shin 높이 3/6/10m -> 부감각 8.5/16.7/26.6도) 비단조이며(6m 최적), 대상마다 방향이 반대다 — 사람 전신은 위에서 볼수록 유리하다(overhead 89.02% > 45도 83.52%). 근거가 정리되기 전까지 바꾸지 않는다.",
+    "literature_points": [
+     {
+      "height_m": 3,
+      "theta_deg": 8.5,
+      "f1": 0.608,
+      "normalized": 0.9282
+     },
+     {
+      "height_m": 6,
+      "theta_deg": 16.7,
+      "f1": 0.655,
+      "normalized": 1.0
+     },
+     {
+      "height_m": 10,
+      "theta_deg": 26.6,
+      "f1": 0.583,
+      "normalized": 0.8901
+     }
+    ],
+    "extrapolation": "측정 범위 밖은 0 으로 본다"
+   },
+   "h_occ": {
+    "form": "logistic",
+    "params": {
+     "k": 4.7446,
+     "x0": 0.4664
+    },
+    "normalized_at": "occ=0",
+    "input": "occ_pct_box/100",
+    "r2": 0.9613,
+    "measured_range": [
+     0.0,
+     0.99
+    ],
+    "measured_on": "Gilroy 2023 Fig.4 — 보행자 820 인스턴스, CenterNet",
+    "replaces": "자체 스트라이프 마스킹 실험의 exp(-4.20*o). 문헌보다 2.4배 가혹했다 — 가림 30%%에서 0.28 대 0.63~0.71",
+    "extrapolation": "측정 범위 밖은 0 으로 본다"
+   },
+   "baseline_P": 0.875,
+   "n_conditions": null,
+   "n_images": null,
+   "iou_thr": 0.5,
+   "conf_thr": 0.25,
+   "status": "ok"
+  }
+ },
+ "status": "ok",
+ "_note": "h_occ 는 로지스틱이다. curve_params 계약의 h_occ 는 exp_decay 를 가정하므로 detect_model 이 form 을 보고 갈라야 한다."
+}

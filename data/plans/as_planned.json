@@ -1,14 +1,14 @@
 {
  "_about": "CCTV 계획서 (BIGB 입력 계약)",
- "_note": "예시 계획서 — 경계 폴에 균등 배치한 8대 (실무 관행 모사)",
+ "_note": "실무 관행 모사 — 현장 경계를 따라 등간격 16대. 위치는 이 규칙만으로 정했고 검출확률을 보지 않았다. 방위는 설치자의 현장 조준을 모사해 15도 격자에서 골랐다. 생성: tools/make_as_planned.py",
  "site": {
-  "width_m": 100,
-  "depth_m": 60
+  "width_m": 210.0,
+  "depth_m": 125.0
  },
  "cameras": [
   {
    "id": "c_b000",
-   "x": 5.0,
+   "x": 7.5,
    "y": 1.0,
    "z": 6.0,
    "yaw_deg": 45.0,
@@ -19,7 +19,7 @@
   },
   {
    "id": "c_b004",
-   "x": 25.0,
+   "x": 37.5,
    "y": 1.0,
    "z": 6.0,
    "yaw_deg": 45.0,
@@ -29,30 +29,30 @@
    "mount": "boundary_pole"
   },
   {
-   "id": "c_b009",
-   "x": 45.0,
-   "y": 59.0,
+   "id": "c_b010",
+   "x": 82.5,
+   "y": 1.0,
    "z": 6.0,
-   "yaw_deg": 300.0,
+   "yaw_deg": 45.0,
    "hfov_deg": 90.0,
    "img_w": 3840,
    "img_h": 2160,
    "mount": "boundary_pole"
   },
   {
-   "id": "c_b013",
-   "x": 65.0,
-   "y": 59.0,
+   "id": "c_b016",
+   "x": 127.5,
+   "y": 1.0,
    "z": 6.0,
-   "yaw_deg": 225.0,
+   "yaw_deg": 105.0,
    "hfov_deg": 90.0,
    "img_w": 3840,
    "img_h": 2160,
    "mount": "boundary_pole"
   },
   {
-   "id": "c_b018",
-   "x": 95.0,
+   "id": "c_b022",
+   "x": 172.5,
    "y": 1.0,
    "z": 6.0,
    "yaw_deg": 135.0,
@@ -62,20 +62,31 @@
    "mount": "boundary_pole"
   },
   {
-   "id": "c_b022",
-   "x": 1.0,
-   "y": 15.0,
+   "id": "c_b026",
+   "x": 202.5,
+   "y": 1.0,
    "z": 6.0,
-   "yaw_deg": 30.0,
+   "yaw_deg": 135.0,
    "hfov_deg": 90.0,
    "img_w": 3840,
    "img_h": 2160,
    "mount": "boundary_pole"
   },
   {
-   "id": "c_b027",
-   "x": 99.0,
-   "y": 35.0,
+   "id": "c_b033",
+   "x": 209.0,
+   "y": 39.0625,
+   "z": 6.0,
+   "yaw_deg": 165.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b039",
+   "x": 209.0,
+   "y": 85.9375,
    "z": 6.0,
    "yaw_deg": 195.0,
    "hfov_deg": 90.0,
@@ -84,15 +95,93 @@
    "mount": "boundary_pole"
   },
   {
-   "id": "c_b031",
-   "x": 99.0,
-   "y": 55.0,
+   "id": "c_b027",
+   "x": 202.5,
+   "y": 124.0,
    "z": 6.0,
-   "yaw_deg": 210.0,
+   "yaw_deg": 225.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b023",
+   "x": 172.5,
+   "y": 124.0,
+   "z": 6.0,
+   "yaw_deg": 225.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b017",
+   "x": 127.5,
+   "y": 124.0,
+   "z": 6.0,
+   "yaw_deg": 225.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b011",
+   "x": 82.5,
+   "y": 124.0,
+   "z": 6.0,
+   "yaw_deg": 315.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b005",
+   "x": 37.5,
+   "y": 124.0,
+   "z": 6.0,
+   "yaw_deg": 315.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b001",
+   "x": 7.5,
+   "y": 124.0,
+   "z": 6.0,
+   "yaw_deg": 315.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b038",
+   "x": 1.0,
+   "y": 85.9375,
+   "z": 6.0,
+   "yaw_deg": 345.0,
+   "hfov_deg": 90.0,
+   "img_w": 3840,
+   "img_h": 2160,
+   "mount": "boundary_pole"
+  },
+  {
+   "id": "c_b032",
+   "x": 1.0,
+   "y": 39.0625,
+   "z": 6.0,
+   "yaw_deg": 15.0,
    "hfov_deg": 90.0,
    "img_w": 3840,
    "img_h": 2160,
    "mount": "boundary_pole"
   }
- ]
+ ],
+ "_known_deviation": "이 계획서는 zone_derive 의 concrete_pour 수정(2026-08-27 23:37) **전**에 생성됐다. 지금 기준으로 다시 만들면 c_b039 한 대의 방위가 195도 -> 210도 로 바뀐다(16대 중 1대, 15도). 현재 산출물(site_eval·pmatrix·sensitivity)은 모두 이 계획서로 계산된 값이므로 **일부러 되돌려 두었다** - 파일과 수치가 어긋나는 것이 더 나쁘다. 다시 맞추려면 tools/make_as_planned.py 를 돌린 뒤 report.py -> export_site.py -> export_picker.py -> sensitivity.py 를 다시 돌릴 것(약 1시간 20분)."
 }

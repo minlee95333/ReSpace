@@ -198,6 +198,35 @@
     }
 
     /* 투영 평면 → 화면. _fit 은 draw() 가 매번 다시 잰다. */
+    /* 화면 좌표 -> 세계 좌표. **_raw 를 그대로 뒤집은 것이다.**
+     *
+     * 사용자가 지도를 클릭해 카메라를 놓으려면 이 역변환이 있어야 한다.
+     * 원근이 켜져 있으면(3D) 화면 한 점이 한 줄기 광선이라 z 를 알아도
+     * 배율 k 가 깊이에 얽혀 있어 닫힌 해가 없다. **평행투영일 때만 답한다** —
+     * 2D·2.5D 가 그 경우다. 3D 에서는 null 을 돌려주고 부르는 쪽이 막는다.
+     *
+     * z 는 "그 높이의 수평면 위 어디인가" 를 정한다. 지면에 놓을 때는 0 이다.
+     */
+    unproject(px, py, z = 0) {
+      if (this.cam.persp) return null;          // 3D 는 닫힌 해가 없다
+      const f = this._fit;
+      if (!f || !f.s) return null;
+      const S = this.d.site;
+      const pit = this.cam.pitch * DEG;
+      const sp = Math.sin(pit);
+      if (Math.abs(sp) < 1e-9) return null;     // 정측면은 평면을 못 집는다
+      const rx = (px - f.ox) / f.s;
+      const sy = (py - f.oy) / f.s;
+      const dz = (z - (this._pivotZ || 0)) * (this.cam.zx || 1);
+      const ry = (sy + dz * Math.cos(pit)) / sp;
+      const yaw = this.cam.yaw * DEG;
+      const c = Math.cos(yaw), s_ = Math.sin(yaw);
+      // (rx,ry) 는 yaw 로 돈 좌표다. 반대로 돌린다.
+      const dx = rx * c + ry * s_;
+      const dy = -rx * s_ + ry * c;
+      return { x: dx + S.width_m / 2, y: dy + S.depth_m / 2 };
+    }
+
     _project(x, y, z) {
       const r = this._raw(x, y, z);
       const f = this._fit;
@@ -424,9 +453,30 @@
                        oy: this.H/2 - (b[1] + b[3])/2 * s };
     }
 
+    /* 상자의 여덟 꼭짓점 -> 여섯 면.
+     *
+     * **연직축 회전(yaw_deg)을 반영한다** (2026-08-27). 계산 쪽은 줄곧
+     * 반영하고 있었는데(geometry._ray_hits_box 가 광선을 상자의 로컬 좌표로
+     * 돌린다) 그리기만 축정렬이었다. 404·405동이 사선이라, 화면에는 반듯한
+     * 건물이 서 있고 그 건물이 만드는 가림 그림자만 비스듬한 어긋남이 났다. */
     _boxFaces(b) {
-      const c = [[b.x1, b.y1, b.z1], [b.x2, b.y1, b.z1], [b.x2, b.y2, b.z1], [b.x1, b.y2, b.z1],
+      let c;
+      if (b.yaw_deg) {
+        const cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
+        const r = b.yaw_deg * DEG, co = Math.cos(r), si = Math.sin(r);
+        // site_model.Box 의 회전과 같은 방향이어야 한다 - 그림자와 어긋나면
+        // 고치기 전보다 나쁘다. 로컬 -> 세계는 to_local_xy 의 역변환이다.
+        const rot = (x, y) => { const dx = x - cx, dy = y - cy;
+          return [cx + dx * co - dy * si, cy + dx * si + dy * co]; };
+        const q = [rot(b.x1, b.y1), rot(b.x2, b.y1), rot(b.x2, b.y2), rot(b.x1, b.y2)];
+        c = [[q[0][0], q[0][1], b.z1], [q[1][0], q[1][1], b.z1],
+             [q[2][0], q[2][1], b.z1], [q[3][0], q[3][1], b.z1],
+             [q[0][0], q[0][1], b.z2], [q[1][0], q[1][1], b.z2],
+             [q[2][0], q[2][1], b.z2], [q[3][0], q[3][1], b.z2]];
+      } else {
+      c = [[b.x1, b.y1, b.z1], [b.x2, b.y1, b.z1], [b.x2, b.y2, b.z1], [b.x1, b.y2, b.z1],
                  [b.x1, b.y1, b.z2], [b.x2, b.y1, b.z2], [b.x2, b.y2, b.z2], [b.x1, b.y2, b.z2]];
+      }
       const idx = [[0,1,2,3],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]];
       return idx.map(f => f.map(i => this._project(c[i][0], c[i][1], c[i][2])));
     }
